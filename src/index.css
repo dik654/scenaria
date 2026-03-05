@@ -1,0 +1,87 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * {
+    box-sizing: border-box;
+  }
+
+  html, body, #root {
+    height: 100%;
+    margin: 0;
+    padding: 0;
+    background-color: #0a0a0a;
+    color: #e5e5e5;
+  }
+
+  /* Custom scrollbar */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: #333;
+    border-radius: 3px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: #555;
+  }
+}
+
+@layer utilities {
+  .line-clamp-2 {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+}
+
+/* Screenplay-specific typography */
+.screenplay-page {
+  font-family: 'Courier New', 'Noto Sans Mono KR', monospace;
+  font-size: 12pt;
+  line-height: 1.0;
+  color: #f0f0f0;
+}
+
+.block-action {
+  margin: 0.5em 0;
+}
+
+.block-character {
+  text-align: center;
+  font-weight: bold;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  margin-top: 1em;
+  margin-bottom: 0;
+}
+
+.block-parenthetical {
+  text-align: center;
+  font-style: italic;
+  margin: 0;
+}
+
+.block-dialogue {
+  text-align: center;
+  width: 60%;
+  margin: 0 auto;
+}
+
+.block-transition {
+  text-align: right;
+  text-transform: uppercase;
+  margin: 1em 0;
+}
+
+/* IME composition state indicator */
+input[data-composing="true"],
+textarea[data-composing="true"] {
+  background: rgba(220, 38, 38, 0.05);
+}

@@ -143,6 +143,7 @@ export function SceneNavigator() {
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
   const [filter, setFilter] = useState('');
+  const [statusFilter, setStatusFilter] = useState<SceneStatus | 'all'>('all');
 
   const handleSelectScene = useCallback(async (entry: SceneIndexEntry) => {
     if (!dirHandle) return;
@@ -301,13 +302,19 @@ export function SceneNavigator() {
     setDragOverIndex(null);
   }, [dragIndex, dragOverIndex, reorderScenes, dirHandle]);
 
-  const filtered = filter.trim()
-    ? index.filter(e =>
-        e.location.includes(filter) ||
-        e.summary?.includes(filter) ||
-        String(e.number).includes(filter)
-      )
-    : index;
+  const filtered = index.filter(e => {
+    const matchText = !filter.trim() || e.location.includes(filter) || e.summary?.includes(filter) || String(e.number).includes(filter);
+    const matchStatus = statusFilter === 'all' || e.status === statusFilter;
+    return matchText && matchStatus;
+  });
+
+  // Progress bar data
+  const statusCounts = { outline: 0, draft: 0, revision: 0, done: 0, none: 0 };
+  index.forEach(s => {
+    if (s.status) statusCounts[s.status]++;
+    else statusCounts.none++;
+  });
+  const total = index.length;
 
   return (
     <div className="w-52 flex-shrink-0 bg-gray-900 border-r border-gray-800 flex flex-col">
@@ -322,6 +329,42 @@ export function SceneNavigator() {
         >
           +
         </button>
+      </div>
+
+      {/* Progress bar */}
+      {total > 0 && (
+        <div className="px-2 pt-1.5">
+          <div className="flex h-1.5 rounded-full overflow-hidden bg-gray-800" title={`완료 ${statusCounts.done} · 수정 ${statusCounts.revision} · 초고 ${statusCounts.draft} · 아웃라인 ${statusCounts.outline}`}>
+            {statusCounts.done > 0    && <div style={{ width: `${statusCounts.done    / total * 100}%` }} className="bg-green-500" />}
+            {statusCounts.revision > 0 && <div style={{ width: `${statusCounts.revision / total * 100}%` }} className="bg-yellow-500" />}
+            {statusCounts.draft > 0   && <div style={{ width: `${statusCounts.draft   / total * 100}%` }} className="bg-blue-500" />}
+            {statusCounts.outline > 0 && <div style={{ width: `${statusCounts.outline / total * 100}%` }} className="bg-gray-500" />}
+          </div>
+          <p className="text-xs text-gray-700 mt-0.5">
+            완료 {statusCounts.done}/{total}
+          </p>
+        </div>
+      )}
+
+      {/* Status filter chips */}
+      <div className="px-2 pb-1 flex flex-wrap gap-1">
+        {(['all', 'outline', 'draft', 'revision', 'done'] as const).map(s => (
+          <button
+            key={s}
+            onClick={() => setStatusFilter(s)}
+            className={`text-xs px-1.5 py-0.5 rounded-full transition-colors ${
+              statusFilter === s
+                ? s === 'all' ? 'bg-gray-600 text-white'
+                : s === 'outline' ? 'bg-gray-500 text-white'
+                : s === 'draft' ? 'bg-blue-600 text-white'
+                : s === 'revision' ? 'bg-yellow-600 text-white'
+                : 'bg-green-600 text-white'
+                : 'text-gray-600 hover:text-gray-400'
+            }`}
+          >
+            {s === 'all' ? `전체 ${total}` : s === 'outline' ? `아웃 ${statusCounts.outline}` : s === 'draft' ? `초고 ${statusCounts.draft}` : s === 'revision' ? `수정 ${statusCounts.revision}` : `완료 ${statusCounts.done}`}
+          </button>
+        ))}
       </div>
 
       {/* Filter input */}

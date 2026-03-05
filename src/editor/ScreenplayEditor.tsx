@@ -585,6 +585,30 @@ export function ScreenplayEditor({ mode = 'normal', readOnly = false }: { mode?:
   const [saveIndicator, setSaveIndicator] = useState<'saved' | 'saving' | 'unsaved'>('saved');
   const saveTimerRef = useRef<number | null>(null);
   const blocksContainerRef = useRef<HTMLDivElement>(null);
+  const focusBlock = useCallback((index: number, atEnd = false) => {
+    setSelectedBlockIndex(index);
+    // Let React re-render first (isSelected triggers focus in block views)
+    // For atEnd, we need to place cursor after focus
+    if (atEnd) {
+      requestAnimationFrame(() => {
+        const container = blocksContainerRef.current;
+        if (!container) return;
+        const el = container.querySelector<HTMLElement>(`[data-block-index="${index}"] textarea, [data-block-index="${index}"] [contenteditable="true"]`);
+        if (!el) return;
+        if (el.tagName === 'TEXTAREA') {
+          const ta = el as HTMLTextAreaElement;
+          ta.setSelectionRange(ta.value.length, ta.value.length);
+        } else {
+          const range = document.createRange();
+          const sel = window.getSelection();
+          range.selectNodeContents(el);
+          range.collapse(false);
+          sel?.removeAllRanges();
+          sel?.addRange(range);
+        }
+      });
+    }
+  }, []);
 
   // Typewriter mode: scroll selected block to vertical center
   useEffect(() => {
@@ -861,7 +885,44 @@ export function ScreenplayEditor({ mode = 'normal', readOnly = false }: { mode?:
       return; // Let SlashMenu handle ArrowUp/Down/Enter
     }
 
-    if (e.key === 'Tab' && !e.shiftKey) {
+    // Arrow key block navigation
+    if (e.key === 'ArrowUp' && !e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey && index > 0) {
+      const container = blocksContainerRef.current;
+      const el = container?.querySelector<HTMLElement>(`[data-block-index="${index}"] textarea, [data-block-index="${index}"] [contenteditable="true"]`);
+      if (el) {
+        if (el.tagName === 'TEXTAREA') {
+          const ta = el as HTMLTextAreaElement;
+          if (ta.selectionStart === 0) { e.preventDefault(); focusBlock(index - 1, true); }
+        } else {
+          const sel = window.getSelection();
+          if (sel?.rangeCount) {
+            const range = sel.getRangeAt(0);
+            const preRange = document.createRange();
+            preRange.selectNodeContents(el);
+            preRange.setEnd(range.startContainer, range.startOffset);
+            if (preRange.toString().length === 0) { e.preventDefault(); focusBlock(index - 1, true); }
+          }
+        }
+      }
+    } else if (e.key === 'ArrowDown' && !e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey && index < currentScene!.blocks.length - 1) {
+      const container = blocksContainerRef.current;
+      const el = container?.querySelector<HTMLElement>(`[data-block-index="${index}"] textarea, [data-block-index="${index}"] [contenteditable="true"]`);
+      if (el) {
+        if (el.tagName === 'TEXTAREA') {
+          const ta = el as HTMLTextAreaElement;
+          if (ta.selectionStart === ta.value.length) { e.preventDefault(); focusBlock(index + 1, false); }
+        } else {
+          const sel = window.getSelection();
+          if (sel?.rangeCount) {
+            const range = sel.getRangeAt(0);
+            const postRange = document.createRange();
+            postRange.selectNodeContents(el);
+            postRange.setStart(range.endContainer, range.endOffset);
+            if (postRange.toString().length === 0) { e.preventDefault(); focusBlock(index + 1, false); }
+          }
+        }
+      }
+    } else if (e.key === 'Tab' && !e.shiftKey) {
       e.preventDefault();
       const nextType = getNextBlockType(block, currentScene!.blocks, index);
       insertBlock(index, nextType);

@@ -33,6 +33,17 @@ export function SceneDashboard() {
   const issueScenes = scenes.filter(s => s.hasConsistencyIssue).length;
   const foreshadowScenes = scenes.filter(s => s.hasUnresolvedForeshadowing).length;
 
+  // Writing status
+  const statusCounts = { outline: 0, draft: 0, revision: 0, done: 0, none: 0 };
+  scenes.forEach(s => { if (s.status) statusCounts[s.status]++; else statusCounts.none++; });
+  const statusLabels: { key: keyof typeof statusCounts; label: string; color: string }[] = [
+    { key: 'done',     label: '완료',    color: '#22C55E' },
+    { key: 'revision', label: '수정',    color: '#EAB308' },
+    { key: 'draft',    label: '초고',    color: '#3B82F6' },
+    { key: 'outline',  label: '아웃라인', color: '#6B7280' },
+    { key: 'none',     label: '미설정',  color: '#374151' },
+  ];
+
   // Act distribution
   const actBoundaries = [0, 0.25, 0.5, 0.75, 1.0];
   const actCounts = [0, 0, 0, 0];
@@ -94,6 +105,38 @@ export function SceneDashboard() {
             );
           })}
           <p className="text-xs text-gray-700 mt-1">점선 = 이상적인 비율</p>
+        </div>
+      </Section>
+
+      {/* Writing progress */}
+      <Section title="작성 진행도">
+        <div className="space-y-1.5">
+          {/* Progress bar */}
+          <div className="flex h-3 rounded-full overflow-hidden bg-gray-800">
+            {statusLabels.map(({ key, color }) =>
+              statusCounts[key] > 0 ? (
+                <div
+                  key={key}
+                  style={{ width: `${statusCounts[key] / scenes.length * 100}%`, backgroundColor: color }}
+                  title={`${statusLabels.find(l => l.key === key)?.label}: ${statusCounts[key]}씬`}
+                />
+              ) : null
+            )}
+          </div>
+          {/* Legend */}
+          <div className="flex flex-wrap gap-x-3 gap-y-1">
+            {statusLabels.filter(({ key }) => statusCounts[key] > 0).map(({ key, label, color }) => (
+              <span key={key} className="text-xs flex items-center gap-1">
+                <span className="w-2 h-2 rounded-full inline-block" style={{ backgroundColor: color }} />
+                <span className="text-gray-400">{label} {statusCounts[key]}</span>
+              </span>
+            ))}
+          </div>
+          {statusCounts.done > 0 && (
+            <p className="text-xs text-gray-600">
+              완성률 {Math.round(statusCounts.done / scenes.length * 100)}%
+            </p>
+          )}
         </div>
       </Section>
 

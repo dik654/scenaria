@@ -159,14 +159,13 @@ export class HistoryManager {
       ? idx.savePoints[idx.savePoints.length - 1].id
       : null;
 
+    const parentSnap = parentId
+      ? await readJSON<Record<string, string>>(this.dirHandle, SAVES_DIR, parentId, 'files.json')
+      : null;
+
     let changedFiles: string[] = [];
-    if (parentId) {
-      const parentSnap = await readJSON<Record<string, string>>(
-        this.dirHandle, SAVES_DIR, parentId, 'files.json'
-      );
-      if (parentSnap) {
-        changedFiles = Object.keys(snapshot).filter(k => snapshot[k] !== parentSnap[k]);
-      }
+    if (parentSnap) {
+      changedFiles = Object.keys(snapshot).filter(k => snapshot[k] !== parentSnap[k]);
     } else {
       changedFiles = Object.keys(snapshot);
     }
@@ -175,7 +174,19 @@ export class HistoryManager {
     const charactersModified = changedFiles
       .filter(f => f.startsWith('characters/') && !f.includes('_index'))
       .map(f => f.replace('characters/', '').replace('.json', ''));
-    const dialoguesChanged = 0; // TODO: count dialogue block diffs
+
+    // Count net dialogue block changes across modified scene files
+    let dialoguesChanged = 0;
+    for (const f of changedFiles.filter(f => f.startsWith('screenplay/') && f.endsWith('.json'))) {
+      try {
+        const newBlocks: Array<{ type: string }> = JSON.parse(snapshot[f]).blocks ?? [];
+        const oldBlocks: Array<{ type: string }> = parentSnap?.[f] ? JSON.parse(parentSnap[f]).blocks ?? [] : [];
+        dialoguesChanged += Math.abs(
+          newBlocks.filter(b => b.type === 'dialogue').length -
+          oldBlocks.filter(b => b.type === 'dialogue').length
+        );
+      } catch { /* ignore parse errors */ }
+    }
 
     const savePoint: SavePoint = {
       id,

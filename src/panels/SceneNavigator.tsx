@@ -284,6 +284,31 @@ export function SceneNavigator() {
     }
   }, [dirHandle, index, setIndex, setCurrentScene]);
 
+  const handleReorderScene = useCallback(async (fromIndex: number, toIndex: number) => {
+    if (toIndex < 0 || toIndex >= index.length) return;
+    reorderScenes(fromIndex, toIndex);
+    const newIndex = useSceneStore.getState().index;
+    if (dirHandle) {
+      await fileIO.writeJSON(dirHandle, 'screenplay/_index.json', { scenes: newIndex });
+    }
+  }, [index.length, reorderScenes, dirHandle]);
+
+  // Alt+Up / Alt+Down: reorder currently active scene
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (!e.altKey || (e.key !== 'ArrowUp' && e.key !== 'ArrowDown')) return;
+      const state = useSceneStore.getState();
+      const cur = state.currentSceneId;
+      if (!cur) return;
+      const i = state.index.findIndex(s => s.id === cur);
+      if (i === -1) return;
+      e.preventDefault();
+      handleReorderScene(i, e.key === 'ArrowUp' ? i - 1 : i + 1);
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [handleReorderScene]);
+
   const handleDragEnd = useCallback(async () => {
     if (dragIndex === null || dragOverIndex === null || dragIndex === dragOverIndex) {
       setDragIndex(null);

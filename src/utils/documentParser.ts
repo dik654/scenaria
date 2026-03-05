@@ -156,7 +156,9 @@ export function parseFountainToScenes(text: string): Partial<Scene>[] {
   const sceneHeadingRE = /^(INT|EXT|INT\.?\/EXT|I\/E)[\s.]/i;
   const forceHeadingRE = /^\./;
   const transitionRE = /^(FADE OUT\.?|FADE IN:|FADE TO|CUT TO:|SMASH CUT|MATCH CUT|DISSOLVE TO:?|THE END)$/i;
-  const charNameRE = /^[A-Z가-힣][A-Z가-힣\s\-''.]*(\s+\(.*\))?$/;
+  // Latin names: all-caps word(s). Korean names: pure Hangul syllables only (no dots/particles).
+  const charNameRE = /^[A-Z가-힣][A-Z가-힣\s\-'']*(\s+\(.*\))?$/;
+  const koreanNameRE = /^[가-힣]+(\s+[가-힣]+)?$/;
 
   const scenes: Partial<Scene>[] = [];
   let currentScene: Partial<Scene> | null = null;
@@ -213,14 +215,15 @@ export function parseFountainToScenes(text: string): Partial<Scene>[] {
       continue;
     }
 
-    // Character name: single line, all caps (or Korean uppercase equivalent), after non-dialogue block
-    if (
-      lines.length === 1 &&
-      charNameRE.test(firstLine) &&
-      firstLine === firstLine.toUpperCase() &&
+    // Character name: single line, all caps (Latin) or pure Hangul word(s) (Korean)
+    const hasLatinChars = /[A-Za-z]/.test(firstLine);
+    const isCharName = lines.length === 1 &&
       firstLine.length < 50 &&
-      lastBlockType !== 'character'
-    ) {
+      lastBlockType !== 'character' &&
+      (hasLatinChars
+        ? charNameRE.test(firstLine) && firstLine === firstLine.toUpperCase()
+        : koreanNameRE.test(firstLine));
+    if (isCharName) {
       const voiceMatch = firstLine.match(/\(([^)]+)\)\s*$/);
       const name = firstLine.replace(/\s*\([^)]+\)\s*$/, '').trim();
       const voiceRaw = voiceMatch?.[1]?.trim() ?? 'normal';

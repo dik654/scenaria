@@ -97,6 +97,7 @@ export interface SceneIndexEntry {
   summary?: string;
   tags?: string[];
   cardColor?: string;
+  tensionLevel?: number;
   hasConsistencyIssue?: boolean;
   hasUnresolvedForeshadowing?: boolean;
   characterCount?: number;

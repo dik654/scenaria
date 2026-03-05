@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
-import type { Scene, SceneBlock, ActionBlock, CharacterBlock, DialogueBlock, ParentheticalBlock, TransitionBlock } from '../types/scene';
+import type { Scene, SceneBlock, SceneIndexEntry, ActionBlock, CharacterBlock, DialogueBlock, ParentheticalBlock, TransitionBlock } from '../types/scene';
 import { useSceneStore } from '../store/sceneStore';
 import { useCharacterStore } from '../store/characterStore';
 import { useProjectStore } from '../store/projectStore';
@@ -558,7 +558,39 @@ export function ScreenplayEditor({ mode = 'normal', readOnly = false }: { mode?:
       const state = useSceneStore.getState();
       const entry = state.index.find((s) => s.id === currentScene.id);
       const filename = entry?.filename ?? `${currentScene.id}.json`;
-      await fileIO.writeJSON(dirHandle, `screenplay/${filename}`, currentScene);
+
+      // Sync scene.characters from character blocks
+      const characterIds = [
+        ...new Set(
+          currentScene.blocks
+            .filter((b): b is CharacterBlock => b.type === 'character')
+            .map((b) => b.characterId)
+            .filter(Boolean)
+        ),
+      ];
+      const sceneToSave: Scene = { ...currentScene, characters: characterIds };
+
+      await fileIO.writeJSON(dirHandle, `screenplay/${filename}`, sceneToSave);
+
+      // Sync SceneIndexEntry with latest header/meta
+      const indexUpdates: Partial<SceneIndexEntry> = {
+        location: sceneToSave.header.location,
+        timeOfDay: sceneToSave.header.timeOfDay,
+        interior: sceneToSave.header.interior,
+        summary: sceneToSave.meta.summary || undefined,
+        tags: sceneToSave.meta.tags,
+        cardColor: sceneToSave.meta.cardColor,
+        tensionLevel: sceneToSave.meta.tensionLevel,
+        characterCount: characterIds.length,
+      };
+      state.updateIndexEntry(sceneToSave.id, indexUpdates);
+
+      // Persist updated _index.json
+      const newIndex = useSceneStore.getState().index;
+      await fileIO.writeJSON(dirHandle, 'screenplay/_index.json', { scenes: newIndex });
+
+      // Keep in-memory scene in sync with saved version
+      state.updateCurrentScene(sceneToSave);
       state.markClean();
       setSaveIndicator('saved');
       autoSave?.markDirty();

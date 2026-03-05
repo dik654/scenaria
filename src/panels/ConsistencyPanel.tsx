@@ -1,10 +1,16 @@
 import { useEffect, useState } from 'react';
 import { useConsistencyStore } from '../store/consistencyStore';
 import { useProjectStore } from '../store/projectStore';
+import { useSceneStore } from '../store/sceneStore';
 import { fileIO } from '../io';
 import type { ConsistencyData, IssueSeverity } from '../types/consistency';
 import type { ForeshadowingIndex } from '../types/story';
-import { checkUnresolvedForeshadowing } from '../ai/consistencyChecker';
+import type { Scene } from '../types/scene';
+import {
+  checkUnresolvedForeshadowing,
+  checkSceneTimeContradictions,
+  checkCharacterLocationContradictions,
+} from '../ai/consistencyChecker';
 
 const SEVERITY_ICON: Record<IssueSeverity, string> = {
   error: '🔴',
@@ -17,7 +23,46 @@ const SEVERITY_ORDER: Record<IssueSeverity, number> = { error: 0, warning: 1, in
 export function ConsistencyPanel() {
   const { data, openIssues, setData, resolveIssue, ignoreIssue, isChecking, setChecking } = useConsistencyStore();
   const { dirHandle } = useProjectStore();
+  const { index: sceneIndex } = useSceneStore();
   const [filter, setFilter] = useState<'all' | IssueSeverity>('all');
+
+  const runFullCheck = async () => {
+    if (!dirHandle || isChecking) return;
+    setChecking(true);
+    try {
+      // Load all scenes
+      const scenes: Scene[] = [];
+      for (const entry of sceneIndex) {
+        try {
+          const scene = await fileIO.readJSON<Scene>(dirHandle, `screenplay/${entry.filename}`);
+          if (scene) scenes.push(scene);
+        } catch { /* skip */ }
+      }
+
+      // Load foreshadowing
+      const foreshadowing = await fileIO.readJSON<ForeshadowingIndex>(dirHandle, 'story/foreshadowing.json')
+        .catch(() => null);
+
+      // Run all checkers
+      const issues = [
+        ...checkSceneTimeContradictions(scenes),
+        ...checkCharacterLocationContradictions(scenes),
+        ...(foreshadowing ? checkUnresolvedForeshadowing(foreshadowing, []) : []),
+      ];
+
+      const updated: ConsistencyData = {
+        lastChecked: new Date().toISOString(),
+        issues,
+        rules: [],
+      };
+      setData(updated);
+      await fileIO.writeJSON(dirHandle, 'story/consistency.json', updated);
+    } catch (err) {
+      console.error('정합성 검사 실패:', err);
+    } finally {
+      setChecking(false);
+    }
+  };
 
   useEffect(() => {
     if (!dirHandle || data) return;
@@ -67,6 +112,17 @@ export function ConsistencyPanel() {
 
   return (
     <div className="flex flex-col h-full">
+      {/* Run check button */}
+      <div className="px-3 py-2 border-b border-gray-800 flex items-center gap-2 flex-shrink-0">
+        <button
+          onClick={runFullCheck}
+          disabled={isChecking || sceneIndex.length === 0}
+          className="flex-1 text-xs py-1.5 bg-gray-800 hover:bg-gray-700 text-gray-300 hover:text-white border border-gray-700 rounded transition-colors disabled:opacity-50"
+        >
+          {isChecking ? '검사 중...' : '🔍 정합성 검사 실행'}
+        </button>
+      </div>
+
       {/* Summary */}
       <div className="px-3 py-2 border-b border-gray-800 flex items-center gap-3">
         <div className="flex gap-2 text-xs">

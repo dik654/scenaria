@@ -36,7 +36,7 @@ export function TensionFlow({ onSceneClick }: { onSceneClick?: (sceneId: string)
       sceneId: s.id,
       number: s.number,
       location: s.location,
-      tension: 5, // Default — real value comes from scene meta (lazy loaded)
+      tension: s.tensionLevel ?? 5,
     }));
 
     const xScale = d3.scaleLinear()

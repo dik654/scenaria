@@ -26,12 +26,14 @@ const TIME_ICON: Record<TimeOfDay, string> = {
 interface SceneCardProps {
   entry: SceneIndexEntry;
   isActive: boolean;
+  isLast: boolean;
   onSelect: () => void;
   onDelete: () => void;
   onDuplicate: () => void;
+  onMergeNext: () => void;
 }
 
-function SceneCard({ entry, isActive, onSelect, onDelete, onDuplicate }: SceneCardProps) {
+function SceneCard({ entry, isActive, isLast, onSelect, onDelete, onDuplicate, onMergeNext }: SceneCardProps) {
   const [showMenu, setShowMenu] = useState(false);
 
   return (
@@ -79,6 +81,15 @@ function SceneCard({ entry, isActive, onSelect, onDelete, onDuplicate }: SceneCa
             >
               복제
             </button>
+            {!isLast && (
+              <button
+                onClick={(e) => { e.stopPropagation(); onMergeNext(); setShowMenu(false); }}
+                className="w-full text-left px-3 py-1.5 text-xs text-gray-300 hover:bg-gray-700"
+              >
+                다음 씬과 합치기
+              </button>
+            )}
+            <div className="border-t border-gray-700 my-0.5" />
             <button
               onClick={(e) => { e.stopPropagation(); onDelete(); setShowMenu(false); }}
               className="w-full text-left px-3 py-1.5 text-xs text-red-400 hover:bg-gray-700"
@@ -225,6 +236,45 @@ export function SceneNavigator() {
     }
   }, [dirHandle, index, setIndex]);
 
+  const handleMergeScene = useCallback(async (entry: SceneIndexEntry) => {
+    const entryIdx = index.findIndex(s => s.id === entry.id);
+    if (entryIdx === -1 || entryIdx === index.length - 1) return;
+    const nextEntry = index[entryIdx + 1];
+    if (!dirHandle) return;
+    if (!confirm(`S#${entry.number} "${entry.location}"과 S#${nextEntry.number} "${nextEntry.location}"를 합치겠습니까?\n두 번째 씬은 삭제됩니다.`)) return;
+    try {
+      const [scene, nextScene] = await Promise.all([
+        fileIO.readJSON<Scene>(dirHandle, `screenplay/${entry.filename}`),
+        fileIO.readJSON<Scene>(dirHandle, `screenplay/${nextEntry.filename}`),
+      ]);
+      const merged: Scene = {
+        ...scene,
+        blocks: [...scene.blocks, ...nextScene.blocks],
+        characters: [...new Set([...(scene.characters ?? []), ...(nextScene.characters ?? [])])],
+        meta: {
+          ...scene.meta,
+          estimatedMinutes: (scene.meta?.estimatedMinutes ?? 0) + (nextScene.meta?.estimatedMinutes ?? 0),
+          summary: scene.meta?.summary ? `${scene.meta.summary} / ${nextScene.meta?.summary ?? ''}` : (nextScene.meta?.summary ?? ''),
+        },
+      };
+      await fileIO.writeJSON(dirHandle, `screenplay/${entry.filename}`, merged);
+      await fileIO.deleteFile(dirHandle, `screenplay/${nextEntry.filename}`);
+      const newIndex = renumberScenes(index.filter(s => s.id !== nextEntry.id));
+      const updatedEntry = newIndex.find(s => s.id === entry.id);
+      if (updatedEntry) {
+        const merged2 = newIndex.map(s => s.id === entry.id ? { ...s, summary: merged.meta?.summary ?? '' } : s);
+        await fileIO.writeJSON(dirHandle, 'screenplay/_index.json', { scenes: merged2 });
+        setIndex(merged2);
+      } else {
+        await fileIO.writeJSON(dirHandle, 'screenplay/_index.json', { scenes: newIndex });
+        setIndex(newIndex);
+      }
+      setCurrentScene(entry.id, merged);
+    } catch (err) {
+      console.error('씬 합치기 실패:', err);
+    }
+  }, [dirHandle, index, setIndex, setCurrentScene]);
+
   const handleDragEnd = useCallback(async () => {
     if (dragIndex === null || dragOverIndex === null || dragIndex === dragOverIndex) {
       setDragIndex(null);
@@ -280,9 +330,11 @@ export function SceneNavigator() {
               <SceneCard
                 entry={entry}
                 isActive={entry.id === currentSceneId}
+                isLast={i === index.length - 1}
                 onSelect={() => handleSelectScene(entry)}
                 onDelete={() => handleDeleteScene(entry)}
                 onDuplicate={() => handleDuplicateScene(entry)}
+                onMergeNext={() => handleMergeScene(entry)}
               />
             </div>
           ))

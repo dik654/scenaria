@@ -1,22 +1,33 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useSceneStore } from '../store/sceneStore';
 import { useProjectStore } from '../store/projectStore';
 import { useCharacterStore } from '../store/characterStore';
 import { fileIO } from '../io';
-import type { Scene } from '../types/scene';
+import type { Scene, SceneIndexEntry } from '../types/scene';
 import type { Character } from '../types/character';
 import { renderFullScreenplayTXT, buildLLMContextText, sceneToFountain } from '../utils/formatRenderer';
+import { parseFountainToScenes } from '../utils/documentParser';
+import { nanoid } from 'nanoid';
+import { nextSceneId, renumberScenes } from '../utils/sceneNumbering';
+import { sceneFilename } from '../utils/fileNaming';
 
 type ExportFormat = 'txt' | 'fountain' | 'llm-context';
+type PanelMode = 'export' | 'import';
 
 export function ExportPanel() {
-  const { index: sceneIndex, currentScene } = useSceneStore();
+  const { index: sceneIndex, currentScene, addSceneToIndex, setIndex, setCurrentScene } = useSceneStore();
   const { meta, dirHandle } = useProjectStore();
   const { index: charIndex, characters } = useCharacterStore();
+  const [panelMode, setPanelMode] = useState<PanelMode>('export');
   const [format, setFormat] = useState<ExportFormat>('txt');
   const [scope, setScope] = useState<'all' | 'current'>('all');
   const [isExporting, setIsExporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Import state
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [importPreview, setImportPreview] = useState<{ count: number; titles: string[] } | null>(null);
+  const [importData, setImportData] = useState<Partial<Scene>[] | null>(null);
+  const [isImporting, setIsImporting] = useState(false);
 
   const handleExport = async () => {
     if (!dirHandle || !meta) return;
@@ -122,9 +133,124 @@ export function ExportPanel() {
     }
   };
 
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const text = await file.text();
+      const scenes = parseFountainToScenes(text);
+      if (scenes.length === 0) { setError('씬을 찾지 못했습니다. Fountain 형식(.fountain)인지 확인하세요.'); return; }
+      setImportData(scenes);
+      setImportPreview({
+        count: scenes.length,
+        titles: scenes.slice(0, 5).map(s => `${s.header?.location ?? '?'} (${s.header?.timeOfDay ?? '?'})`),
+      });
+      setError(null);
+    } catch (err) {
+      setError('파일 읽기 실패: ' + (err instanceof Error ? err.message : String(err)));
+    }
+  };
+
+  const handleImport = async () => {
+    if (!dirHandle || !importData || !meta) return;
+    setIsImporting(true);
+    setError(null);
+    try {
+      const startNumber = sceneIndex.length + 1;
+      const newEntries: SceneIndexEntry[] = [];
+      for (let i = 0; i < importData.length; i++) {
+        const partial = importData[i];
+        const id = nextSceneId([...sceneIndex, ...newEntries]);
+        const scene: Scene = {
+          id,
+          version: 1,
+          header: partial.header ?? { interior: null, location: '장소', timeOfDay: 'DAY' },
+          meta: partial.meta ?? { summary: '', emotionalTone: [], tensionLevel: 5, estimatedMinutes: 0, tags: [] },
+          blocks: partial.blocks ?? [],
+          characters: partial.characters ?? [],
+        };
+        const filename = sceneFilename(id, scene.header.location);
+        await fileIO.writeJSON(dirHandle, `screenplay/${filename}`, scene);
+        newEntries.push({
+          id,
+          filename,
+          number: startNumber + i,
+          location: scene.header.location,
+          timeOfDay: scene.header.timeOfDay,
+          interior: scene.header.interior,
+          summary: scene.meta.summary,
+          characterCount: scene.characters.length,
+        });
+      }
+      const newIndex = [...sceneIndex, ...newEntries];
+      await fileIO.writeJSON(dirHandle, 'screenplay/_index.json', { scenes: newIndex });
+      setIndex(newIndex);
+      // Navigate to first imported scene
+      if (newEntries[0]) {
+        const first = await fileIO.readJSON<Scene>(dirHandle, `screenplay/${newEntries[0].filename}`);
+        setCurrentScene(newEntries[0].id, first);
+      }
+      setImportData(null);
+      setImportPreview(null);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      setPanelMode('export');
+      alert(`${newEntries.length}개 씬을 가져왔습니다.`);
+    } catch (err) {
+      setError('가져오기 실패: ' + (err instanceof Error ? err.message : String(err)));
+    } finally {
+      setIsImporting(false);
+    }
+  };
+
   return (
-    <div className="p-4 space-y-4">
-      <h3 className="text-sm font-medium text-white">내보내기</h3>
+    <div className="flex flex-col h-full">
+      {/* Mode tabs */}
+      <div className="flex border-b border-gray-800 flex-shrink-0">
+        {(['export', 'import'] as PanelMode[]).map(m => (
+          <button key={m} onClick={() => { setPanelMode(m); setError(null); setImportPreview(null); setImportData(null); }}
+            className={`flex-1 py-2 text-xs transition-colors ${panelMode === m ? 'text-white border-b-2 border-red-500' : 'text-gray-500 hover:text-gray-300'}`}>
+            {m === 'export' ? '내보내기' : '가져오기'}
+          </button>
+        ))}
+      </div>
+
+    <div className="flex-1 overflow-y-auto p-4 space-y-4">
+      {panelMode === 'import' ? (
+        <>
+          <p className="text-xs text-gray-500">Fountain(.fountain) 또는 텍스트 파일에서 씬을 가져옵니다.</p>
+          <input ref={fileInputRef} type="file" accept=".fountain,.txt,.text" onChange={handleFileSelect}
+            className="hidden" />
+          <button onClick={() => fileInputRef.current?.click()}
+            className="w-full py-2 border border-dashed border-gray-600 rounded-lg text-xs text-gray-400 hover:border-gray-400 hover:text-white transition-colors">
+            파일 선택...
+          </button>
+
+          {importPreview && (
+            <div className="bg-gray-800 rounded-lg p-3 space-y-2">
+              <p className="text-xs text-green-400 font-medium">✓ {importPreview.count}개 씬 발견</p>
+              <ul className="space-y-0.5">
+                {importPreview.titles.map((t, i) => (
+                  <li key={i} className="text-xs text-gray-400">S#{sceneIndex.length + 1 + i}. {t}</li>
+                ))}
+                {importPreview.count > 5 && (
+                  <li className="text-xs text-gray-600">... 외 {importPreview.count - 5}개</li>
+                )}
+              </ul>
+              <p className="text-xs text-gray-600">현재 {sceneIndex.length}개 씬 뒤에 추가됩니다.</p>
+            </div>
+          )}
+
+          {error && <p className="text-xs text-red-400">{error}</p>}
+
+          {importData && (
+            <button onClick={handleImport} disabled={isImporting}
+              className="w-full py-2 bg-red-600 hover:bg-red-700 text-white text-sm rounded-lg disabled:opacity-50 font-medium">
+              {isImporting ? '가져오는 중...' : `${importData.length}개 씬 가져오기`}
+            </button>
+          )}
+        </>
+      ) : (
+        <>
 
       {/* Format */}
       <div>
@@ -198,6 +324,9 @@ export function ExportPanel() {
           </button>
         )}
       </div>
+      </>
+      )}
+    </div>
     </div>
   );
 }

@@ -1,8 +1,9 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useMemo } from 'react';
 import { useSceneStore } from '../store/sceneStore';
 import { useProjectStore } from '../store/projectStore';
 import { fileIO } from '../io';
 import type { Scene, SceneIndexEntry, SceneStatus, TimeOfDay, Interior } from '../types/scene';
+import { STATUS_LABELS, STATUS_BG_ACTIVE, STATUS_BG_BUTTON } from '../utils/statusMapping';
 import { nanoid } from 'nanoid';
 import { nextSceneId, renumberScenes } from '../utils/sceneNumbering';
 import { sceneFilename } from '../utils/fileNaming';
@@ -59,12 +60,8 @@ function SceneCard({ entry, isActive, isLast, onSelect, onDelete, onDuplicate, o
           <div className="flex gap-1 ml-auto items-center">
             {entry.status && (
               <span
-                title={`작성 상태: ${entry.status}`}
-                className={`w-2 h-2 rounded-full ${
-                  entry.status === 'outline' ? 'bg-gray-500' :
-                  entry.status === 'draft' ? 'bg-blue-500' :
-                  entry.status === 'revision' ? 'bg-yellow-500' : 'bg-green-500'
-                }`}
+                title={`작성 상태: ${STATUS_LABELS[entry.status]}`}
+                className={`w-2 h-2 rounded-full ${STATUS_BG_ACTIVE[entry.status]}`}
               />
             )}
             {entry.hasConsistencyIssue && <span title="정합성 이슈" className="text-xs">🔴</span>}
@@ -302,18 +299,24 @@ export function SceneNavigator() {
     setDragOverIndex(null);
   }, [dragIndex, dragOverIndex, reorderScenes, dirHandle]);
 
-  const filtered = index.filter(e => {
+  const filtered = useMemo(() => index.filter(e => {
     const matchText = !filter.trim() || e.location.includes(filter) || e.summary?.includes(filter) || String(e.number).includes(filter);
     const matchStatus = statusFilter === 'all' || e.status === statusFilter;
     return matchText && matchStatus;
-  });
+  }), [index, filter, statusFilter]);
 
-  // Progress bar data
-  const statusCounts = { outline: 0, draft: 0, revision: 0, done: 0, none: 0 };
-  index.forEach(s => {
-    if (s.status) statusCounts[s.status]++;
-    else statusCounts.none++;
-  });
+  // Pre-build id→position map to avoid O(n²) indexOf in render
+  const indexPositionMap = useMemo(
+    () => new Map(index.map((e, i) => [e.id, i])),
+    [index]
+  );
+
+  const statusCounts = useMemo(() => {
+    const counts = { outline: 0, draft: 0, revision: 0, done: 0, none: 0 };
+    index.forEach(s => { if (s.status) counts[s.status]++; else counts.none++; });
+    return counts;
+  }, [index]);
+
   const total = index.length;
 
   return (
@@ -348,21 +351,21 @@ export function SceneNavigator() {
 
       {/* Status filter chips */}
       <div className="px-2 pb-1 flex flex-wrap gap-1">
-        {(['all', 'outline', 'draft', 'revision', 'done'] as const).map(s => (
+        {([
+          { id: 'all',      label: `전체 ${total}`,                   active: 'bg-gray-600 text-white' },
+          { id: 'outline',  label: `아웃 ${statusCounts.outline}`,    active: `${STATUS_BG_BUTTON.outline} text-white` },
+          { id: 'draft',    label: `초고 ${statusCounts.draft}`,      active: `${STATUS_BG_BUTTON.draft} text-white` },
+          { id: 'revision', label: `수정 ${statusCounts.revision}`,   active: `${STATUS_BG_BUTTON.revision} text-white` },
+          { id: 'done',     label: `완료 ${statusCounts.done}`,       active: `${STATUS_BG_BUTTON.done} text-white` },
+        ] as const).map(chip => (
           <button
-            key={s}
-            onClick={() => setStatusFilter(s)}
+            key={chip.id}
+            onClick={() => setStatusFilter(chip.id as SceneStatus | 'all')}
             className={`text-xs px-1.5 py-0.5 rounded-full transition-colors ${
-              statusFilter === s
-                ? s === 'all' ? 'bg-gray-600 text-white'
-                : s === 'outline' ? 'bg-gray-500 text-white'
-                : s === 'draft' ? 'bg-blue-600 text-white'
-                : s === 'revision' ? 'bg-yellow-600 text-white'
-                : 'bg-green-600 text-white'
-                : 'text-gray-600 hover:text-gray-400'
+              statusFilter === chip.id ? chip.active : 'text-gray-600 hover:text-gray-400'
             }`}
           >
-            {s === 'all' ? `전체 ${total}` : s === 'outline' ? `아웃 ${statusCounts.outline}` : s === 'draft' ? `초고 ${statusCounts.draft}` : s === 'revision' ? `수정 ${statusCounts.revision}` : `완료 ${statusCounts.done}`}
+            {chip.label}
           </button>
         ))}
       </div>
@@ -396,7 +399,7 @@ export function SceneNavigator() {
           </div>
         ) : (
           filtered.map((entry) => {
-            const i = index.indexOf(entry);
+            const i = indexPositionMap.get(entry.id) ?? 0;
             return <div
               key={entry.id}
               draggable

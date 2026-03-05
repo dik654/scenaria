@@ -5,6 +5,7 @@ import { useSceneStore } from '../store/sceneStore';
 import { fileIO } from '../io';
 import type { Character, CharacterIndexEntry } from '../types/character';
 import { nanoid } from 'nanoid';
+import { STATUS_BG_ACTIVE } from '../utils/statusMapping';
 
 const DRAMA_FIELDS = [
   { key: 'goal',   label: '목표',    desc: '주인공이 원하는 것' },
@@ -393,11 +394,8 @@ export function CharacterPanel() {
           )}
 
           {/* Scene appearances */}
-          {(() => {
-            const appearances = sceneIndex.filter(s =>
-              s.characters?.includes(selectedId!) ||
-              s.characters?.some(cid => cid === selectedId)
-            );
+          {selectedId && (() => {
+            const appearances = sceneIndex.filter(s => s.characters?.includes(selectedId));
             if (appearances.length === 0) return null;
             return (
               <div>
@@ -412,11 +410,7 @@ export function CharacterPanel() {
                       <span className="text-xs font-mono text-red-400">S#{s.number}</span>
                       <span className="text-xs text-gray-400 truncate">{s.location}</span>
                       {s.status && (
-                        <span className={`ml-auto w-1.5 h-1.5 rounded-full flex-shrink-0 ${
-                          s.status === 'outline' ? 'bg-gray-500' :
-                          s.status === 'draft' ? 'bg-blue-500' :
-                          s.status === 'revision' ? 'bg-yellow-500' : 'bg-green-500'
-                        }`} />
+                        <span className={`ml-auto w-1.5 h-1.5 rounded-full flex-shrink-0 ${STATUS_BG_ACTIVE[s.status]}`} />
                       )}
                     </button>
                   ))}

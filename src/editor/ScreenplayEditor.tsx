@@ -6,6 +6,8 @@ import { useProjectStore } from '../store/projectStore';
 import { fileIO } from '../io';
 import { SlashMenu, type SlashMenuItem } from './widgets/SlashMenu';
 import { AIFloatingToolbar } from './widgets/AIFloatingToolbar';
+import { nextSceneId, renumberScenes } from '../utils/sceneNumbering';
+import { sceneFilename } from '../utils/fileNaming';
 
 // ── Block rendering components ──────────────────────────────────────────────
 
@@ -624,6 +626,59 @@ export function ScreenplayEditor({ mode = 'normal', readOnly = false }: { mode?:
     setDragOverBlockIndex(null);
   }, [dragBlockIndex, dragOverBlockIndex, currentScene, updateCurrentScene, scheduleAutosave]);
 
+  // Scene split: Ctrl+Shift+\ — splits current scene at selectedBlockIndex
+  const splitScene = useCallback(async () => {
+    if (!currentScene || !dirHandle || selectedBlockIndex === null || selectedBlockIndex === 0) return;
+    const state = useSceneStore.getState();
+    const entry = state.index.find((s) => s.id === currentScene.id);
+    if (!entry) return;
+
+    // Save current scene first (trimmed)
+    const blocksA = currentScene.blocks.slice(0, selectedBlockIndex);
+    const blocksB = currentScene.blocks.slice(selectedBlockIndex);
+    if (blocksA.length === 0 || blocksB.length === 0) return;
+
+    const currentIndex = state.index;
+    const newId = nextSceneId(currentIndex);
+    const newScene: Scene = {
+      ...currentScene,
+      id: newId,
+      version: 1,
+      blocks: blocksB,
+      characters: [...new Set(blocksB.filter((b): b is CharacterBlock => b.type === 'character').map((b) => b.characterId).filter(Boolean))],
+    };
+    const newFilename = sceneFilename(newId, newScene.header.location);
+
+    const sceneA: Scene = {
+      ...currentScene,
+      blocks: blocksA,
+      characters: [...new Set(blocksA.filter((b): b is CharacterBlock => b.type === 'character').map((b) => b.characterId).filter(Boolean))],
+    };
+
+    await fileIO.writeJSON(dirHandle, `screenplay/${entry.filename}`, sceneA);
+    await fileIO.writeJSON(dirHandle, `screenplay/${newFilename}`, newScene);
+
+    const insertAt = currentIndex.findIndex((s) => s.id === currentScene.id) + 1;
+    const newEntry: SceneIndexEntry = {
+      ...entry,
+      id: newId,
+      filename: newFilename,
+      characterCount: newScene.characters.length,
+    };
+    const spliced = [...currentIndex.slice(0, insertAt), newEntry, ...currentIndex.slice(insertAt)];
+    const renumbered = renumberScenes(spliced);
+    await fileIO.writeJSON(dirHandle, 'screenplay/_index.json', { scenes: renumbered });
+
+    state.updateCurrentScene(sceneA);
+    state.markClean();
+    state.updateIndexEntry(currentScene.id, { characterCount: sceneA.characters.length });
+    state.setIndex(renumbered);
+    // Navigate to new scene
+    state.setCurrentScene(newId, newScene);
+    setSelectedBlockIndex(0);
+    setSaveIndicator('saved');
+  }, [currentScene, dirHandle, selectedBlockIndex]);
+
   // Ctrl+S
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -632,10 +687,14 @@ export function ScreenplayEditor({ mode = 'normal', readOnly = false }: { mode?:
         if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
         saveScene();
       }
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === '\\') {
+        e.preventDefault();
+        splitScene();
+      }
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [saveScene]);
+  }, [saveScene, splitScene]);
 
   if (!currentScene) {
     return (
@@ -767,7 +826,7 @@ export function ScreenplayEditor({ mode = 'normal', readOnly = false }: { mode?:
       {/* Save indicator */}
       <div className="flex justify-end items-center gap-3 px-4 py-1">
         <span className="text-xs text-gray-700">
-          / 슬래시로 블록 선택 · Tab 다음 블록 · Ctrl+Enter 대사 반복
+          / 슬래시로 블록 선택 · Tab 다음 블록 · Ctrl+Enter 대사 반복 · Ctrl+Shift+\ 씬 분할
         </span>
         {/* Word / block count */}
         <span className="text-xs text-gray-700">
@@ -816,6 +875,10 @@ export function ScreenplayEditor({ mode = 'normal', readOnly = false }: { mode?:
                 dragOverBlockIndex === i && dragBlockIndex !== i ? 'border-t-2 border-blue-500' : ''
               }`}
             >
+              {/* Split point indicator: shows above the selected block when Ctrl is held */}
+              {i === selectedBlockIndex && i > 0 && (
+                <div className="absolute -top-px left-0 right-0 h-px bg-orange-500/40 pointer-events-none" title="Ctrl+Shift+\로 여기서 씬 분할" />
+              )}
               {/* Drag handle */}
               {!readOnly && (
                 <span

@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { useSceneStore } from '../store/sceneStore';
 import { useProjectStore } from '../store/projectStore';
 import { fileIO } from '../io';
@@ -131,6 +131,17 @@ export function SceneNavigator() {
       console.error('씬 로드 실패:', err);
     }
   }, [dirHandle, setCurrentScene]);
+
+  // Listen for gotoScene events (from Ctrl+G or FindReplace navigation)
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const sceneId = (e as CustomEvent<string>).detail;
+      const entry = useSceneStore.getState().index.find(s => s.id === sceneId);
+      if (entry) handleSelectScene(entry);
+    };
+    window.addEventListener('scenaria:gotoScene', handler);
+    return () => window.removeEventListener('scenaria:gotoScene', handler);
+  }, [handleSelectScene]);
 
   const handleAddScene = useCallback(async () => {
     if (!dirHandle || isAdding) return;

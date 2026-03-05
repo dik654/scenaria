@@ -13,6 +13,7 @@ interface BlockProps {
   block: SceneBlock;
   index: number;
   isSelected: boolean;
+  readOnly: boolean;
   characterNames: Record<string, string>;
   characterColors: Record<string, string>;
   onSelect: (index: number) => void;
@@ -20,7 +21,7 @@ interface BlockProps {
   onKeyDown: (e: React.KeyboardEvent, index: number) => void;
 }
 
-function ActionBlockView({ block, index, isSelected, onSelect, onChange, onKeyDown }: BlockProps) {
+function ActionBlockView({ block, index, isSelected, readOnly, onSelect, onChange, onKeyDown }: BlockProps) {
   const ref = useRef<HTMLTextAreaElement>(null);
   const b = block as ActionBlock;
 
@@ -29,7 +30,7 @@ function ActionBlockView({ block, index, isSelected, onSelect, onChange, onKeyDo
   }, [isSelected]);
 
   const handleInput = () => {
-    if (!ref.current) return;
+    if (!ref.current || readOnly) return;
     ref.current.style.height = 'auto';
     ref.current.style.height = ref.current.scrollHeight + 'px';
     onChange(index, { ...b, text: ref.current.value });
@@ -52,6 +53,7 @@ function ActionBlockView({ block, index, isSelected, onSelect, onChange, onKeyDo
         onFocus={() => onSelect(index)}
         onKeyDown={(e) => onKeyDown(e, index)}
         rows={1}
+        readOnly={readOnly}
         className="w-full bg-transparent resize-none text-gray-200 font-mono text-sm leading-relaxed focus:outline-none overflow-hidden"
         style={{ minHeight: '1.5em' }}
       />
@@ -59,7 +61,7 @@ function ActionBlockView({ block, index, isSelected, onSelect, onChange, onKeyDo
   );
 }
 
-function CharacterBlockView({ block, index, isSelected, characterNames, characterColors, onSelect, onChange, onKeyDown }: BlockProps) {
+function CharacterBlockView({ block, index, isSelected, readOnly, characterNames, characterColors, onSelect, onChange, onKeyDown }: BlockProps) {
   const b = block as CharacterBlock;
   const name = characterNames[b.characterId] ?? b.characterId;
   const color = characterColors[b.characterId] ?? '#DC2626';
@@ -87,7 +89,9 @@ function CharacterBlockView({ block, index, isSelected, characterNames, characte
         defaultValue={name}
         onFocus={() => onSelect(index)}
         onKeyDown={(e) => onKeyDown(e, index)}
+        readOnly={readOnly}
         onChange={(e) => {
+          if (readOnly) return;
           const newId = e.target.value.toLowerCase().replace(/\s+/g, '-');
           onChange(index, { ...b, characterId: newId });
         }}
@@ -101,7 +105,7 @@ function CharacterBlockView({ block, index, isSelected, characterNames, characte
   );
 }
 
-function DialogueBlockView({ block, index, isSelected, onSelect, onChange, onKeyDown }: BlockProps) {
+function DialogueBlockView({ block, index, isSelected, readOnly, onSelect, onChange, onKeyDown }: BlockProps) {
   const b = block as DialogueBlock;
   const ref = useRef<HTMLTextAreaElement>(null);
 
@@ -110,7 +114,7 @@ function DialogueBlockView({ block, index, isSelected, onSelect, onChange, onKey
   }, [isSelected]);
 
   const handleInput = () => {
-    if (!ref.current) return;
+    if (!ref.current || readOnly) return;
     ref.current.style.height = 'auto';
     ref.current.style.height = ref.current.scrollHeight + 'px';
     onChange(index, { ...b, text: ref.current.value });
@@ -128,6 +132,7 @@ function DialogueBlockView({ block, index, isSelected, onSelect, onChange, onKey
         onFocus={() => onSelect(index)}
         onKeyDown={(e) => onKeyDown(e, index)}
         rows={1}
+        readOnly={readOnly}
         className="bg-transparent resize-none text-gray-100 font-mono text-sm leading-relaxed focus:outline-none overflow-hidden"
         style={{ width: '60%', minHeight: '1.5em' }}
       />
@@ -135,7 +140,7 @@ function DialogueBlockView({ block, index, isSelected, onSelect, onChange, onKey
   );
 }
 
-function ParentheticalBlockView({ block, index, isSelected, onSelect, onChange, onKeyDown }: BlockProps) {
+function ParentheticalBlockView({ block, index, isSelected, readOnly, onSelect, onChange, onKeyDown }: BlockProps) {
   const b = block as ParentheticalBlock;
   const ref = useRef<HTMLInputElement>(null);
 
@@ -155,7 +160,8 @@ function ParentheticalBlockView({ block, index, isSelected, onSelect, onChange, 
           defaultValue={b.text}
           onFocus={() => onSelect(index)}
           onKeyDown={(e) => onKeyDown(e, index)}
-          onChange={(e) => onChange(index, { ...b, text: e.target.value })}
+          readOnly={readOnly}
+          onChange={(e) => { if (!readOnly) onChange(index, { ...b, text: e.target.value }); }}
           className="bg-transparent italic text-gray-400 font-mono text-sm focus:outline-none"
           style={{ width: `${Math.max(b.text.length, 4) + 2}ch` }}
         />
@@ -165,7 +171,7 @@ function ParentheticalBlockView({ block, index, isSelected, onSelect, onChange, 
   );
 }
 
-function TransitionBlockView({ block, index, isSelected, onSelect, onChange, onKeyDown }: BlockProps) {
+function TransitionBlockView({ block, index, isSelected, readOnly, onSelect, onChange, onKeyDown }: BlockProps) {
   const b = block as TransitionBlock;
   const ref = useRef<HTMLSelectElement>(null);
   const PRESETS = ['CUT TO:', 'FADE OUT.', 'DISSOLVE TO:', 'SMASH CUT TO:', 'MATCH CUT TO:', 'CUT TO BLACK.', 'FADE IN:'];
@@ -180,7 +186,7 @@ function TransitionBlockView({ block, index, isSelected, onSelect, onChange, onK
         value={b.transitionType}
         onFocus={() => onSelect(index)}
         onKeyDown={(e) => onKeyDown(e as unknown as React.KeyboardEvent, index)}
-        onChange={(e) => onChange(index, { ...b, transitionType: e.target.value })}
+        onChange={(e) => { if (!readOnly) onChange(index, { ...b, transitionType: e.target.value }); }}
         className="bg-transparent text-gray-400 font-mono text-sm uppercase tracking-widest focus:outline-none cursor-pointer"
       >
         {PRESETS.map((p) => <option key={p} value={p} className="bg-gray-900">{p}</option>)}
@@ -282,7 +288,9 @@ function createEmptyBlock(type: SceneBlock['type']): SceneBlock {
   }
 }
 
-export function ScreenplayEditor() {
+type EditorMode = 'normal' | 'focus' | 'reading' | 'typewriter';
+
+export function ScreenplayEditor({ mode = 'normal', readOnly = false }: { mode?: EditorMode; readOnly?: boolean }) {
   const { currentScene, updateCurrentScene } = useSceneStore();
   const { index: charIndex } = useCharacterStore();
   const { dirHandle, autoSave } = useProjectStore();
@@ -518,6 +526,7 @@ export function ScreenplayEditor() {
             block,
             index: i,
             isSelected: selectedBlockIndex === i,
+            readOnly,
             characterNames,
             characterColors,
             onSelect: setSelectedBlockIndex,
@@ -525,7 +534,7 @@ export function ScreenplayEditor() {
             onKeyDown: handleBlockKeyDown,
           };
           return (
-            <div key={i} className="mb-1 relative group">
+            <div key={i} data-block-index={i} className="mb-1 relative group">
               {renderBlock(props)}
               {/* Per-block AI alternative button */}
               {(block.type === 'dialogue' || block.type === 'action') && (

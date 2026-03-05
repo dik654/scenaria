@@ -117,7 +117,7 @@ function createDefaultScene(id: string, number: number): Scene {
 
 export function SceneNavigator() {
   const { index, currentSceneId, setCurrentScene, setIndex, addSceneToIndex, removeSceneFromIndex, reorderScenes } = useSceneStore();
-  const { dirHandle } = useProjectStore();
+  const { dirHandle, autoSave } = useProjectStore();
   const [isAdding, setIsAdding] = useState(false);
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
@@ -125,12 +125,17 @@ export function SceneNavigator() {
   const handleSelectScene = useCallback(async (entry: SceneIndexEntry) => {
     if (!dirHandle) return;
     try {
+      // Trigger autoSave on scene change (save point if dirty)
+      const prevId = useSceneStore.getState().currentSceneId;
+      if (prevId && prevId !== entry.id) {
+        autoSave?.onSceneChange(prevId);
+      }
       const scene = await fileIO.readJSON<Scene>(dirHandle, `screenplay/${entry.filename}`);
       setCurrentScene(entry.id, scene);
     } catch (err) {
       console.error('씬 로드 실패:', err);
     }
-  }, [dirHandle, setCurrentScene]);
+  }, [dirHandle, setCurrentScene, autoSave]);
 
   // Listen for gotoScene events (from Ctrl+G or FindReplace navigation)
   useEffect(() => {
@@ -176,6 +181,13 @@ export function SceneNavigator() {
       setIsAdding(false);
     }
   }, [dirHandle, index, isAdding, addSceneToIndex, setCurrentScene]);
+
+  // Listen for addScene events (from Ctrl+Shift+S or slash menu)
+  useEffect(() => {
+    const handler = () => handleAddScene();
+    window.addEventListener('scenaria:addScene', handler);
+    return () => window.removeEventListener('scenaria:addScene', handler);
+  }, [handleAddScene]);
 
   const handleDeleteScene = useCallback(async (entry: SceneIndexEntry) => {
     if (!dirHandle) return;

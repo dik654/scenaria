@@ -10,7 +10,36 @@ import {
   verifyHandlePermission,
   type RecentProject,
 } from '../io/recentProjects';
+import type { AppSettings } from '../types/project';
 import { nanoid } from 'nanoid';
+
+async function openProjectFromHandle(
+  dirHandle: FileSystemDirectoryHandle,
+  setProject: (d: FileSystemDirectoryHandle, m: import('../types/project').ProjectMeta) => void,
+  setHistoryManager: (hm: HistoryManager) => void,
+  setAutoSave: (as: AutoSave) => void,
+  setSettings: (s: Partial<AppSettings>) => void,
+) {
+  const meta = await loadProject(fileIO, dirHandle);
+  setProject(dirHandle, meta);
+
+  // Load saved settings (API key etc.)
+  const savedSettings = await fileIO.readJSON<AppSettings>(dirHandle, 'settings.json').catch(() => null);
+  if (savedSettings) setSettings(savedSettings);
+
+  // Load API key from localStorage (prototype shortcut)
+  const lsKey = localStorage.getItem('scenaria_api_key');
+  if (lsKey) setSettings({ ai: { ...(savedSettings?.ai ?? { provider: 'claude' }), apiKey: lsKey } });
+
+  const hm = new HistoryManager(dirHandle);
+  await hm.init();
+  setHistoryManager(hm);
+
+  const as = new AutoSave(hm);
+  setAutoSave(as);
+
+  return meta;
+}
 
 interface NewProjectDialogProps {
   onClose: () => void;
@@ -93,7 +122,7 @@ function NewProjectDialog({ onClose, onCreated }: NewProjectDialogProps) {
 export function StartScreen({ onOpen }: { onOpen: () => void }) {
   const [showNewDialog, setShowNewDialog] = useState(false);
   const [recentProjects, setRecentProjects] = useState<RecentProject[]>([]);
-  const { setProject, setHistoryManager, setAutoSave, setError, isLoading, setLoading } =
+  const { setProject, setHistoryManager, setAutoSave, setSettings, setError, isLoading, setLoading } =
     useProjectStore();
 
   useEffect(() => {
@@ -104,15 +133,7 @@ export function StartScreen({ onOpen }: { onOpen: () => void }) {
     setLoading(true);
     try {
       const handle = await fileIO.openProject();
-      const meta = await loadProject(fileIO, handle.dirHandle);
-      setProject(handle.dirHandle, meta);
-
-      const hm = new HistoryManager(handle.dirHandle);
-      await hm.init();
-      setHistoryManager(hm);
-
-      const as = new AutoSave(hm);
-      setAutoSave(as);
+      const meta = await openProjectFromHandle(handle.dirHandle, setProject, setHistoryManager, setAutoSave, setSettings);
 
       await saveRecentProject({
         id: meta.id,
@@ -139,15 +160,7 @@ export function StartScreen({ onOpen }: { onOpen: () => void }) {
         setError('폴더 접근 권한이 없습니다. 다시 열어주세요.');
         return;
       }
-      const meta = await loadProject(fileIO, recent.dirHandle);
-      setProject(recent.dirHandle, meta);
-
-      const hm = new HistoryManager(recent.dirHandle);
-      await hm.init();
-      setHistoryManager(hm);
-
-      const as = new AutoSave(hm);
-      setAutoSave(as);
+      const meta = await openProjectFromHandle(recent.dirHandle, setProject, setHistoryManager, setAutoSave, setSettings);
 
       await saveRecentProject({
         ...recent,

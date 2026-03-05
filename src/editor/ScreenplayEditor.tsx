@@ -752,6 +752,17 @@ export function ScreenplayEditor({ mode = 'normal', readOnly = false }: { mode?:
         <span className="text-xs text-gray-700">
           / 슬래시로 블록 선택 · Tab 다음 블록 · Ctrl+Enter 대사 반복
         </span>
+        {/* Word / block count */}
+        <span className="text-xs text-gray-700">
+          {(() => {
+            const wordCount = currentScene.blocks.reduce((sum, b) => {
+              const text = 'text' in b ? b.text : '';
+              return sum + (text.trim() ? text.trim().split(/\s+/).length : 0);
+            }, 0);
+            const blockCount = currentScene.blocks.length;
+            return `${blockCount}블록 · ${wordCount}어절`;
+          })()}
+        </span>
         <span className={`text-xs ${
           saveIndicator === 'saved' ? 'text-gray-700' :
           saveIndicator === 'saving' ? 'text-yellow-600' : 'text-red-600'

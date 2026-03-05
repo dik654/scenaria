@@ -3,7 +3,7 @@ import { useConsistencyStore } from '../store/consistencyStore';
 import { useProjectStore } from '../store/projectStore';
 import { useSceneStore } from '../store/sceneStore';
 import { fileIO } from '../io';
-import type { ConsistencyData, IssueSeverity } from '../types/consistency';
+import type { ConsistencyData, ConsistencyIssue, IssueSeverity } from '../types/consistency';
 import type { ForeshadowingIndex } from '../types/story';
 import type { Scene } from '../types/scene';
 import {
@@ -57,6 +57,17 @@ export function ConsistencyPanel() {
       };
       setData(updated);
       await fileIO.writeJSON(dirHandle, 'story/consistency.json', updated);
+
+      // Update hasConsistencyIssue flags on SceneIndexEntry
+      const affectedSceneIds = new Set(
+        issues.flatMap((issue: ConsistencyIssue) => issue.scenes ?? [])
+      );
+      const { updateIndexEntry, index } = useSceneStore.getState();
+      for (const entry of index) {
+        updateIndexEntry(entry.id, { hasConsistencyIssue: affectedSceneIds.has(entry.id) });
+      }
+      const newIndex = useSceneStore.getState().index;
+      await fileIO.writeJSON(dirHandle, 'screenplay/_index.json', { scenes: newIndex });
     } catch (err) {
       console.error('정합성 검사 실패:', err);
     } finally {

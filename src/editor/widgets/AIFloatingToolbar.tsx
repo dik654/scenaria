@@ -269,7 +269,7 @@ export function AIFloatingToolbar({
 
         {mode === 'quickactions' && (
           <div className="w-52 py-1">
-            {QUICK_ACTIONS.map((qa) => (
+            {(settings.quickActions?.length ? settings.quickActions : QUICK_ACTIONS).map((qa) => (
               <button
                 key={qa.id}
                 onClick={() => { setMode('alternatives'); handleGenerateAlternatives(qa.prompt); }}

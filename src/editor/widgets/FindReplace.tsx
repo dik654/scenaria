@@ -16,6 +16,7 @@ interface Match {
 interface FindReplaceProps {
   onClose: () => void;
   onNavigate?: (sceneId: string) => void;
+  initialReplace?: boolean;
 }
 
 type SearchScope = 'all' | 'current' | 'action' | 'dialogue';
@@ -30,13 +31,13 @@ function setBlockText(block: SceneBlock, text: string): SceneBlock {
   return block;
 }
 
-export function FindReplace({ onClose, onNavigate }: FindReplaceProps) {
+export function FindReplace({ onClose, onNavigate, initialReplace = false }: FindReplaceProps) {
   const [query, setQuery] = useState('');
   const [replacement, setReplacement] = useState('');
   const [scope, setScope] = useState<SearchScope>('all');
   const [caseSensitive, setCaseSensitive] = useState(false);
   const [useRegex, setUseRegex] = useState(false);
-  const [showReplace, setShowReplace] = useState(false);
+  const [showReplace, setShowReplace] = useState(initialReplace);
   const [matches, setMatches] = useState<Match[]>([]);
   const [currentMatch, setCurrentMatch] = useState(0);
   const [isSearching, setIsSearching] = useState(false);

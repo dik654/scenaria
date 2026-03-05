@@ -291,6 +291,7 @@ function EditorLayout() {
       {showFind && (
         <FindReplace
           onClose={() => setShowFind(false)}
+          initialReplace={findReplace}
           onNavigate={(sceneId) => {
             window.dispatchEvent(new CustomEvent('scenaria:gotoScene', { detail: sceneId }));
           }}

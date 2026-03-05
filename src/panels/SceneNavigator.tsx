@@ -2,7 +2,7 @@ import { useState, useCallback, useEffect } from 'react';
 import { useSceneStore } from '../store/sceneStore';
 import { useProjectStore } from '../store/projectStore';
 import { fileIO } from '../io';
-import type { Scene, SceneIndexEntry, TimeOfDay, Interior } from '../types/scene';
+import type { Scene, SceneIndexEntry, SceneStatus, TimeOfDay, Interior } from '../types/scene';
 import { nanoid } from 'nanoid';
 import { nextSceneId, renumberScenes } from '../utils/sceneNumbering';
 import { sceneFilename } from '../utils/fileNaming';
@@ -56,7 +56,17 @@ function SceneCard({ entry, isActive, isLast, onSelect, onDelete, onDuplicate, o
             <span className="text-xs text-gray-500 font-mono">{entry.interior}</span>
           )}
           {/* Status indicators */}
-          <div className="flex gap-1 ml-auto">
+          <div className="flex gap-1 ml-auto items-center">
+            {entry.status && (
+              <span
+                title={`작성 상태: ${entry.status}`}
+                className={`w-2 h-2 rounded-full ${
+                  entry.status === 'outline' ? 'bg-gray-500' :
+                  entry.status === 'draft' ? 'bg-blue-500' :
+                  entry.status === 'revision' ? 'bg-yellow-500' : 'bg-green-500'
+                }`}
+              />
+            )}
             {entry.hasConsistencyIssue && <span title="정합성 이슈" className="text-xs">🔴</span>}
             {entry.hasUnresolvedForeshadowing && <span title="미회수 떡밥" className="text-xs">🟡</span>}
             {entry.characterCount != null && entry.characterCount > 0 && (

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
-import type { Scene, SceneBlock, SceneIndexEntry, ActionBlock, CharacterBlock, DialogueBlock, ParentheticalBlock, TransitionBlock } from '../types/scene';
+import type { Scene, SceneBlock, SceneIndexEntry, SceneStatus, ActionBlock, CharacterBlock, DialogueBlock, ParentheticalBlock, TransitionBlock } from '../types/scene';
 import type { CharacterIndexEntry } from '../types/character';
 import { useSceneStore } from '../store/sceneStore';
 import { useCharacterStore } from '../store/characterStore';
@@ -354,6 +354,15 @@ function SceneMetaPane({ scene, onChange, readOnly }: {
         onClick={() => setExpanded(!expanded)}
         className="w-full flex items-center gap-3 px-4 py-1.5 text-xs text-gray-600 hover:text-gray-400 transition-colors"
       >
+        {meta.status && (
+          <span className={`px-1.5 py-0.5 rounded-full text-white font-medium ${
+            meta.status === 'outline' ? 'bg-gray-600' :
+            meta.status === 'draft' ? 'bg-blue-600' :
+            meta.status === 'revision' ? 'bg-yellow-600' : 'bg-green-600'
+          }`}>
+            {meta.status === 'outline' ? '아웃라인' : meta.status === 'draft' ? '초고' : meta.status === 'revision' ? '수정' : '완료'}
+          </span>
+        )}
         <span className={`font-mono font-bold ${tensionColor(meta.tensionLevel ?? 5)}`}>
           긴장 {meta.tensionLevel ?? 5}/10
         </span>
@@ -371,6 +380,31 @@ function SceneMetaPane({ scene, onChange, readOnly }: {
       {/* Expanded */}
       {expanded && (
         <div className="px-4 py-3 space-y-3 border-t border-gray-800/50">
+          {/* Status + Summary row */}
+          <div className="flex items-start gap-3">
+            <div className="flex-shrink-0">
+              <label className="text-xs text-gray-500 block mb-1">작성 상태</label>
+              <div className="flex gap-1">
+                {([
+                  ['outline', '아웃라인', 'bg-gray-600'],
+                  ['draft', '초고',     'bg-blue-600'],
+                  ['revision', '수정',  'bg-yellow-600'],
+                  ['done', '완료',      'bg-green-600'],
+                ] as [SceneStatus, string, string][]).map(([s, label, color]) => (
+                  <button
+                    key={s}
+                    onClick={() => !readOnly && onChange({ meta: { ...meta, status: s } })}
+                    className={`text-xs px-2 py-0.5 rounded-full transition-colors ${
+                      meta.status === s ? `${color} text-white` : 'bg-gray-800 text-gray-500 hover:text-gray-300'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
           {/* Summary */}
           <div>
             <label className="text-xs text-gray-500 block mb-1">씬 요약 / 메모</label>
@@ -641,6 +675,8 @@ export function ScreenplayEditor({ mode = 'normal', readOnly = false }: { mode?:
         tags: sceneToSave.meta.tags,
         cardColor: sceneToSave.meta.cardColor,
         tensionLevel: sceneToSave.meta.tensionLevel,
+        status: sceneToSave.meta.status,
+        characters: characterIds,
         characterCount: characterIds.length,
       };
       state.updateIndexEntry(sceneToSave.id, indexUpdates);

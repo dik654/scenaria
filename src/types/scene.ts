@@ -60,6 +60,8 @@ export interface SceneHeader {
   weather?: string;
 }
 
+export type SceneStatus = 'outline' | 'draft' | 'revision' | 'done';
+
 export interface SceneMeta {
   summary: string;
   emotionalTone: string[];
@@ -69,6 +71,7 @@ export interface SceneMeta {
   tags: string[];
   notes?: string;
   cardColor?: string;
+  status?: SceneStatus;
 }
 
 export interface UnidentifiedCharacter {
@@ -98,6 +101,8 @@ export interface SceneIndexEntry {
   tags?: string[];
   cardColor?: string;
   tensionLevel?: number;
+  status?: SceneStatus;
+  characters?: string[];
   hasConsistencyIssue?: boolean;
   hasUnresolvedForeshadowing?: boolean;
   characterCount?: number;

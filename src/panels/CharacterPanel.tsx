@@ -1,6 +1,7 @@
 import { useState, useCallback } from 'react';
 import { useCharacterStore } from '../store/characterStore';
 import { useProjectStore } from '../store/projectStore';
+import { useSceneStore } from '../store/sceneStore';
 import { fileIO } from '../io';
 import type { Character, CharacterIndexEntry } from '../types/character';
 import { nanoid } from 'nanoid';
@@ -230,6 +231,7 @@ function FormRow({ label, hint, children }: { label: string; hint?: string; chil
 export function CharacterPanel() {
   const { index, characters, setCharacter, addToIndex, updateCharacter, removeCharacter } = useCharacterStore();
   const { dirHandle } = useProjectStore();
+  const { index: sceneIndex } = useSceneStore();
   const [editTarget, setEditTarget] = useState<Partial<Character> | null>(null);
   const [isAdding, setIsAdding] = useState(false);
   const [filter, setFilter] = useState('');
@@ -363,7 +365,7 @@ export function CharacterPanel() {
 
       {/* Selected character detail */}
       {selectedChar && selectedEntry && (
-        <div className="border-t border-gray-800 p-3 space-y-2 max-h-60 overflow-y-auto">
+        <div className="border-t border-gray-800 p-3 space-y-2 max-h-72 overflow-y-auto">
           <div className="flex items-center gap-2">
             <div className="w-5 h-5 rounded-full" style={{ backgroundColor: selectedEntry.color }} />
             <span className="text-sm font-medium text-white">{selectedChar.name}</span>
@@ -389,6 +391,39 @@ export function CharacterPanel() {
               ))}
             </div>
           )}
+
+          {/* Scene appearances */}
+          {(() => {
+            const appearances = sceneIndex.filter(s =>
+              s.characters?.includes(selectedId!) ||
+              s.characters?.some(cid => cid === selectedId)
+            );
+            if (appearances.length === 0) return null;
+            return (
+              <div>
+                <p className="text-xs text-gray-600 mb-1">등장 씬 ({appearances.length})</p>
+                <div className="space-y-0.5 max-h-32 overflow-y-auto">
+                  {appearances.map(s => (
+                    <button
+                      key={s.id}
+                      onClick={() => window.dispatchEvent(new CustomEvent('scenaria:gotoScene', { detail: s.id }))}
+                      className="w-full text-left flex items-center gap-2 px-2 py-1 rounded hover:bg-gray-800 transition-colors"
+                    >
+                      <span className="text-xs font-mono text-red-400">S#{s.number}</span>
+                      <span className="text-xs text-gray-400 truncate">{s.location}</span>
+                      {s.status && (
+                        <span className={`ml-auto w-1.5 h-1.5 rounded-full flex-shrink-0 ${
+                          s.status === 'outline' ? 'bg-gray-500' :
+                          s.status === 'draft' ? 'bg-blue-500' :
+                          s.status === 'revision' ? 'bg-yellow-500' : 'bg-green-500'
+                        }`} />
+                      )}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            );
+          })()}
         </div>
       )}
     </div>

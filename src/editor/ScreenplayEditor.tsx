@@ -882,7 +882,7 @@ export function ScreenplayEditor({ mode = 'normal', readOnly = false }: { mode?:
         <span className="text-xs text-gray-700">
           / 슬래시로 블록 선택 · Tab 다음 블록 · Ctrl+Enter 대사 반복 · Ctrl+Shift+\ 씬 분할
         </span>
-        {/* Word / block count */}
+        {/* Block / word / page count */}
         <span className="text-xs text-gray-700">
           {(() => {
             const wordCount = currentScene.blocks.reduce((sum, b) => {
@@ -890,7 +890,13 @@ export function ScreenplayEditor({ mode = 'normal', readOnly = false }: { mode?:
               return sum + (text.trim() ? text.trim().split(/\s+/).length : 0);
             }, 0);
             const blockCount = currentScene.blocks.length;
-            return `${blockCount}블록 · ${wordCount}어절`;
+            const estimatedMin = currentScene.blocks.reduce((sum, b) => {
+              if (b.type === 'dialogue') return sum + b.text.length * 0.004;
+              if (b.type === 'action') return sum + (b as import('../types/scene').ActionBlock).text.length * 0.003;
+              return sum + 0.05;
+            }, 0);
+            const pages = Math.max(0.1, estimatedMin);
+            return `${blockCount}블록 · ${wordCount}어절 · 약 ${pages.toFixed(1)}페이지`;
           })()}
         </span>
         <span className={`text-xs ${

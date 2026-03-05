@@ -132,6 +132,7 @@ export function SceneNavigator() {
   const [isAdding, setIsAdding] = useState(false);
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
+  const [filter, setFilter] = useState('');
 
   const handleSelectScene = useCallback(async (entry: SceneIndexEntry) => {
     if (!dirHandle) return;
@@ -290,6 +291,14 @@ export function SceneNavigator() {
     setDragOverIndex(null);
   }, [dragIndex, dragOverIndex, reorderScenes, dirHandle]);
 
+  const filtered = filter.trim()
+    ? index.filter(e =>
+        e.location.includes(filter) ||
+        e.summary?.includes(filter) ||
+        String(e.number).includes(filter)
+      )
+    : index;
+
   return (
     <div className="w-52 flex-shrink-0 bg-gray-900 border-r border-gray-800 flex flex-col">
       {/* Header */}
@@ -305,6 +314,16 @@ export function SceneNavigator() {
         </button>
       </div>
 
+      {/* Filter input */}
+      <div className="px-2 py-1.5 border-b border-gray-800">
+        <input
+          value={filter}
+          onChange={e => setFilter(e.target.value)}
+          placeholder="위치/요약 검색..."
+          className="w-full bg-gray-800 border border-gray-700 rounded px-2 py-1 text-xs text-gray-300 placeholder-gray-600 focus:outline-none focus:border-gray-500"
+        />
+      </div>
+
       {/* Scene list */}
       <div className="flex-1 overflow-y-auto">
         {index.length === 0 ? (
@@ -317,9 +336,15 @@ export function SceneNavigator() {
               첫 씬 추가
             </button>
           </div>
+        ) : filtered.length === 0 ? (
+          <div className="text-center py-6 px-3">
+            <p className="text-xs text-gray-600">"{filter}" 결과 없음</p>
+            <button onClick={() => setFilter('')} className="mt-1 text-xs text-gray-600 hover:text-gray-400">초기화</button>
+          </div>
         ) : (
-          index.map((entry, i) => (
-            <div
+          filtered.map((entry) => {
+            const i = index.indexOf(entry);
+            return <div
               key={entry.id}
               draggable
               onDragStart={() => setDragIndex(i)}
@@ -336,14 +361,14 @@ export function SceneNavigator() {
                 onDuplicate={() => handleDuplicateScene(entry)}
                 onMergeNext={() => handleMergeScene(entry)}
               />
-            </div>
-          ))
+            </div>;
+          })
         )}
       </div>
 
       {/* Footer stats */}
       <div className="px-3 py-2 border-t border-gray-800 text-xs text-gray-600">
-        총 {index.length}씬
+        {filter ? `${filtered.length}/${index.length}씬` : `총 ${index.length}씬`}
       </div>
     </div>
   );

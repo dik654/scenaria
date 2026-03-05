@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useProjectStore } from './store/projectStore';
 import { useSceneStore } from './store/sceneStore';
 import { useCharacterStore } from './store/characterStore';
@@ -28,16 +28,65 @@ const PANEL_CONFIG = [
   { id: 'settings' as SidePanel,    icon: '⚙️', label: '설정',      width: 'w-80' },
 ];
 
+// ── Dropdown menu types ──────────────────────────────────────────────────────
+type MenuSep = { separator: true };
+type MenuAction = { label: string; shortcut?: string; action: () => void; disabled?: boolean };
+type MenuItem = MenuSep | MenuAction;
+
+function DropdownMenu({ label, items }: { label: string; items: MenuItem[] }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [open]);
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        onClick={() => setOpen(o => !o)}
+        className={`text-xs px-2 py-1 rounded transition-colors ${open ? 'bg-gray-700 text-white' : 'text-gray-500 hover:text-white hover:bg-gray-800'}`}
+      >
+        {label}
+      </button>
+      {open && (
+        <div className="absolute top-full left-0 mt-0.5 z-50 bg-gray-800 border border-gray-700 rounded-lg shadow-2xl py-1 min-w-44">
+          {items.map((item, i) =>
+            'separator' in item ? (
+              <div key={i} className="border-t border-gray-700 my-0.5" />
+            ) : (
+              <button
+                key={i}
+                disabled={item.disabled}
+                onClick={() => { item.action(); setOpen(false); }}
+                className="w-full text-left px-3 py-1.5 text-xs text-gray-300 hover:bg-gray-700 hover:text-white flex items-center justify-between gap-4 disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                <span>{item.label}</span>
+                {item.shortcut && <kbd className="text-gray-600 font-mono text-xs">{item.shortcut}</kbd>}
+              </button>
+            )
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function MenuBar({
   onModeChange,
   mode,
   onFindOpen,
+  onTogglePanel,
 }: {
   onModeChange: (m: EditorMode) => void;
   mode: EditorMode;
   onFindOpen: (replace?: boolean) => void;
+  onTogglePanel: (p: SidePanel) => void;
 }) {
-  const { meta, historyManager } = useProjectStore();
+  const { meta, historyManager, clearProject } = useProjectStore();
   const { currentSceneId, index } = useSceneStore();
   const currentEntry = index.find(s => s.id === currentSceneId);
 
@@ -49,16 +98,59 @@ function MenuBar({
 
   useEffect(() => { document.title = title; }, [title]);
 
+  const createSavePoint = async () => {
+    if (!historyManager) return;
+    const memo = prompt('저장 지점 메모 (Enter 건너뛰기):') ?? undefined;
+    await historyManager.createSavePoint(memo, false);
+  };
+
+  const fileItems: MenuItem[] = [
+    { label: '새 프로젝트', action: () => clearProject() },
+    { label: '프로젝트 열기', action: () => clearProject() },
+    { separator: true },
+    { label: '저장 지점 만들기', shortcut: 'Ctrl+⇧+Enter', action: createSavePoint, disabled: !historyManager },
+    { separator: true },
+    { label: '시작 화면으로', action: () => clearProject() },
+  ];
+
+  const editItems: MenuItem[] = [
+    { label: '찾기', shortcut: 'Ctrl+F', action: () => onFindOpen(false) },
+    { label: '찾기 및 바꾸기', shortcut: 'Ctrl+H', action: () => onFindOpen(true) },
+    { separator: true },
+    { label: '씬 번호로 이동', shortcut: 'Ctrl+G', action: () => { const n = prompt('씬 번호:'); if (!n) return; window.dispatchEvent(new CustomEvent('scenaria:gotoSceneByNumber', { detail: Number(n) })); } },
+    { label: '새 씬 추가', shortcut: 'Ctrl+⇧+S', action: () => window.dispatchEvent(new CustomEvent('scenaria:addScene')) },
+    { separator: true },
+    { label: '씬 분할 (선택 블록)', shortcut: 'Ctrl+⇧+\\', action: () => window.dispatchEvent(new CustomEvent('scenaria:splitScene')) },
+  ];
+
+  const viewItems: MenuItem[] = [
+    { label: '편집 모드', action: () => onModeChange('normal') },
+    { label: '집중 모드', shortcut: 'F', action: () => onModeChange(mode === 'focus' ? 'normal' : 'focus') },
+    { label: '읽기 모드', shortcut: 'R', action: () => onModeChange(mode === 'reading' ? 'normal' : 'reading') },
+    { label: '타자기 모드', shortcut: 'T', action: () => onModeChange(mode === 'typewriter' ? 'normal' : 'typewriter') },
+    { separator: true },
+    { label: '이력 패널', action: () => onTogglePanel('history') },
+    { label: '캐릭터 패널', action: () => onTogglePanel('characters') },
+    { label: '이야기 패널', action: () => onTogglePanel('story') },
+  ];
+
+  const toolItems: MenuItem[] = [
+    { label: '정합성 검사', action: () => onTogglePanel('consistency') },
+    { label: '내보내기', action: () => onTogglePanel('export') },
+    { separator: true },
+    { label: 'AI / 설정', action: () => onTogglePanel('settings') },
+  ];
+
   return (
     <div className="flex items-center h-9 bg-gray-950 border-b border-gray-800 px-3 gap-3 flex-shrink-0 select-none">
       <span className="text-red-500 font-bold text-sm">씬아리아</span>
       <div className="w-px h-4 bg-gray-800" />
 
       <div className="flex gap-0.5">
-        <MenuButton label="파일" />
-        <MenuButton label="편집" onClick={() => onFindOpen()} />
-        <MenuButton label="보기" />
-        <MenuButton label="도구" />
+        <DropdownMenu label="파일" items={fileItems} />
+        <DropdownMenu label="편집" items={editItems} />
+        <DropdownMenu label="보기" items={viewItems} />
+        <DropdownMenu label="도구" items={toolItems} />
       </div>
 
       {/* Editor mode */}
@@ -71,7 +163,7 @@ function MenuBar({
         ] as [EditorMode, string, string][]).map(([m, label, key]) => (
           <button
             key={m}
-            onClick={() => onModeChange(m)}
+            onClick={() => onModeChange(m as EditorMode)}
             title={`${label} 모드 (${key})`}
             className={`text-xs px-2 py-0.5 rounded transition-colors ${
               mode === m ? 'bg-gray-700 text-white' : 'text-gray-600 hover:text-gray-300'
@@ -92,25 +184,14 @@ function MenuBar({
       )}
 
       <button
-        onClick={async () => {
-          if (!historyManager) return;
-          const memo = prompt('저장 지점 메모 (Enter 건너뛰기):') ?? undefined;
-          await historyManager.createSavePoint(memo, false);
-        }}
+        onClick={createSavePoint}
+        disabled={!historyManager}
         title="저장 지점 만들기 (Ctrl+Shift+Enter)"
-        className="text-xs text-gray-600 hover:text-green-400 px-2 py-1 rounded hover:bg-gray-800 transition-colors"
+        className="text-xs text-gray-600 hover:text-green-400 px-2 py-1 rounded hover:bg-gray-800 transition-colors disabled:opacity-30"
       >
         ● 저장 지점
       </button>
     </div>
-  );
-}
-
-function MenuButton({ label, onClick }: { label: string; onClick?: () => void }) {
-  return (
-    <button onClick={onClick} className="text-xs text-gray-500 hover:text-white px-2 py-1 rounded hover:bg-gray-800 transition-colors">
-      {label}
-    </button>
   );
 }
 
@@ -219,9 +300,7 @@ function EditorLayout() {
         const num = prompt('씬 번호로 이동:');
         if (!num) return;
         const entry = index.find(s => s.number === Number(num));
-        if (entry) {
-          window.dispatchEvent(new CustomEvent('scenaria:gotoScene', { detail: entry.id }));
-        }
+        if (entry) window.dispatchEvent(new CustomEvent('scenaria:gotoScene', { detail: entry.id }));
         return;
       }
       // Escape: exit special modes
@@ -239,6 +318,17 @@ function EditorLayout() {
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
   }, [showFind, editorMode, index]);
+
+  // Listen for menu-bar goto-by-number event
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const num = (e as CustomEvent<number>).detail;
+      const entry = index.find(s => s.number === num);
+      if (entry) window.dispatchEvent(new CustomEvent('scenaria:gotoScene', { detail: entry.id }));
+    };
+    window.addEventListener('scenaria:gotoSceneByNumber', handler);
+    return () => window.removeEventListener('scenaria:gotoSceneByNumber', handler);
+  }, [index]);
 
   const togglePanel = (panel: SidePanel) =>
     setRightPanel(prev => prev === panel ? 'none' : panel);
@@ -258,6 +348,7 @@ function EditorLayout() {
           mode={editorMode}
           onModeChange={setEditorMode}
           onFindOpen={(replace) => { setFindReplace(!!replace); setShowFind(true); }}
+          onTogglePanel={togglePanel}
         />
       )}
 

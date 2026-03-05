@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import type { Scene, SceneBlock, SceneIndexEntry, ActionBlock, CharacterBlock, DialogueBlock, ParentheticalBlock, TransitionBlock } from '../types/scene';
+import type { CharacterIndexEntry } from '../types/character';
 import { useSceneStore } from '../store/sceneStore';
 import { useCharacterStore } from '../store/characterStore';
 import { useProjectStore } from '../store/projectStore';
@@ -18,6 +19,8 @@ interface BlockProps {
   readOnly: boolean;
   characterNames: Record<string, string>;
   characterColors: Record<string, string>;
+  charEntries: CharacterIndexEntry[];
+  dialogueAlignment: 'center' | 'left';
   onSelect: (index: number) => void;
   onChange: (index: number, block: SceneBlock) => void;
   onKeyDown: (e: React.KeyboardEvent, index: number) => void;
@@ -63,43 +66,92 @@ function ActionBlockView({ block, index, isSelected, readOnly, onSelect, onChang
   );
 }
 
-function CharacterBlockView({ block, index, isSelected, readOnly, characterNames, characterColors, onSelect, onChange, onKeyDown }: BlockProps) {
+function CharacterBlockView({ block, index, isSelected, readOnly, characterNames, characterColors, charEntries, onSelect, onChange, onKeyDown }: BlockProps) {
   const b = block as CharacterBlock;
-  const name = characterNames[b.characterId] ?? b.characterId;
+  const resolvedName = characterNames[b.characterId] ?? b.characterId;
   const color = characterColors[b.characterId] ?? '#DC2626';
   const ref = useRef<HTMLInputElement>(null);
+  const [inputValue, setInputValue] = useState(resolvedName);
+  const [showDropdown, setShowDropdown] = useState(false);
+  const [dropdownIdx, setDropdownIdx] = useState(0);
+
+  // Sync when block characterId changes externally
+  useEffect(() => {
+    setInputValue(characterNames[b.characterId] ?? b.characterId);
+  }, [b.characterId, characterNames]);
 
   useEffect(() => {
     if (isSelected && ref.current) ref.current.focus();
   }, [isSelected]);
 
-  const voiceLabels: Record<string, string> = {
-    'V.O.': 'V.O.',
-    'O.S.': 'O.S.',
-    'E': 'E',
-    'N': 'N',
-    'normal': '',
+  const filtered = charEntries.filter(c =>
+    c.name.toLowerCase().includes(inputValue.toLowerCase()) ||
+    (c.alias ?? '').toLowerCase().includes(inputValue.toLowerCase())
+  );
+
+  const selectEntry = (entry: CharacterIndexEntry) => {
+    onChange(index, { ...b, characterId: entry.id });
+    setInputValue(entry.name);
+    setShowDropdown(false);
   };
+
+  const useAsNew = () => {
+    const newId = inputValue.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
+    onChange(index, { ...b, characterId: newId || inputValue });
+    setShowDropdown(false);
+  };
+
+  const voiceLabels: Record<string, string> = { 'V.O.': 'V.O.', 'O.S.': 'O.S.', 'E': 'E', 'N': 'N', 'normal': '' };
 
   return (
     <div
       className={`flex justify-center items-baseline gap-2 py-2 ${isSelected ? 'bg-gray-800/50' : ''} rounded cursor-pointer`}
       onClick={() => onSelect(index)}
     >
-      <input
-        ref={ref}
-        defaultValue={name}
-        onFocus={() => onSelect(index)}
-        onKeyDown={(e) => onKeyDown(e, index)}
-        readOnly={readOnly}
-        onChange={(e) => {
-          if (readOnly) return;
-          const newId = e.target.value.toLowerCase().replace(/\s+/g, '-');
-          onChange(index, { ...b, characterId: newId });
-        }}
-        className="bg-transparent text-center font-mono font-bold text-sm uppercase tracking-widest focus:outline-none focus:border-b focus:border-dashed"
-        style={{ color, width: `${Math.max(name.length, 8) + 2}ch` }}
-      />
+      <div className="relative">
+        <input
+          ref={ref}
+          value={inputValue}
+          readOnly={readOnly}
+          onChange={(e) => { setInputValue(e.target.value); setShowDropdown(true); setDropdownIdx(0); }}
+          onFocus={() => { onSelect(index); setShowDropdown(true); }}
+          onBlur={() => setTimeout(() => setShowDropdown(false), 150)}
+          onKeyDown={(e) => {
+            if (showDropdown) {
+              if (e.key === 'ArrowDown') { e.preventDefault(); setDropdownIdx(i => Math.min(i + 1, filtered.length - 1)); return; }
+              if (e.key === 'ArrowUp') { e.preventDefault(); setDropdownIdx(i => Math.max(i - 1, 0)); return; }
+              if (e.key === 'Enter' && filtered[dropdownIdx]) { e.preventDefault(); selectEntry(filtered[dropdownIdx]); return; }
+              if (e.key === 'Escape') { setShowDropdown(false); return; }
+            }
+            onKeyDown(e, index);
+          }}
+          className="bg-transparent text-center font-mono font-bold text-sm uppercase tracking-widest focus:outline-none focus:border-b focus:border-dashed"
+          style={{ color, width: `${Math.max(inputValue.length, 8) + 2}ch` }}
+        />
+        {showDropdown && !readOnly && (
+          <div className="absolute top-full left-1/2 -translate-x-1/2 mt-1 z-50 bg-gray-800 border border-gray-700 rounded-lg shadow-xl py-1 min-w-36 max-h-48 overflow-y-auto">
+            {filtered.map((entry, i) => (
+              <button
+                key={entry.id}
+                onMouseDown={() => selectEntry(entry)}
+                className={`w-full text-left px-3 py-1.5 text-sm flex items-center gap-2 ${i === dropdownIdx ? 'bg-gray-700' : 'hover:bg-gray-700'}`}
+              >
+                <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: entry.color }} />
+                <span style={{ color: entry.color }} className="font-medium">{entry.name}</span>
+                {entry.alias && <span className="text-xs text-gray-500">{entry.alias}</span>}
+              </button>
+            ))}
+            {inputValue && !filtered.find(e => e.name.toLowerCase() === inputValue.toLowerCase()) && (
+              <button
+                onMouseDown={useAsNew}
+                className="w-full text-left px-3 py-1.5 text-xs text-gray-500 hover:bg-gray-700 border-t border-gray-700 mt-0.5 pt-1.5 italic"
+              >
+                "{inputValue}" 새 캐릭터로 사용
+              </button>
+            )}
+          </div>
+        )}
+      </div>
       {b.voiceType !== 'normal' && (
         <span className="text-xs text-gray-400 font-mono">({voiceLabels[b.voiceType]})</span>
       )}
@@ -107,7 +159,7 @@ function CharacterBlockView({ block, index, isSelected, readOnly, characterNames
   );
 }
 
-function DialogueBlockView({ block, index, isSelected, readOnly, onSelect, onChange, onKeyDown }: BlockProps) {
+function DialogueBlockView({ block, index, isSelected, readOnly, dialogueAlignment, onSelect, onChange, onKeyDown }: BlockProps) {
   const b = block as DialogueBlock;
   const ref = useRef<HTMLTextAreaElement>(null);
 
@@ -122,9 +174,11 @@ function DialogueBlockView({ block, index, isSelected, readOnly, onSelect, onCha
     onChange(index, { ...b, text: ref.current.value });
   };
 
+  const isCenter = dialogueAlignment === 'center';
+
   return (
     <div
-      className={`flex justify-center py-1 ${isSelected ? 'bg-gray-800/50' : ''} rounded`}
+      className={`${isCenter ? 'flex justify-center' : 'px-12'} py-1 ${isSelected ? 'bg-gray-800/50' : ''} rounded`}
       onClick={() => onSelect(index)}
     >
       <textarea
@@ -136,7 +190,7 @@ function DialogueBlockView({ block, index, isSelected, readOnly, onSelect, onCha
         rows={1}
         readOnly={readOnly}
         className="bg-transparent resize-none text-gray-100 font-mono text-sm leading-relaxed focus:outline-none overflow-hidden"
-        style={{ width: '60%', minHeight: '1.5em' }}
+        style={{ width: isCenter ? '60%' : '100%', minHeight: '1.5em' }}
       />
     </div>
   );
@@ -492,7 +546,7 @@ type EditorMode = 'normal' | 'focus' | 'reading' | 'typewriter';
 export function ScreenplayEditor({ mode = 'normal', readOnly = false }: { mode?: EditorMode; readOnly?: boolean }) {
   const { currentScene, updateCurrentScene } = useSceneStore();
   const { index: charIndex } = useCharacterStore();
-  const { dirHandle, autoSave } = useProjectStore();
+  const { dirHandle, autoSave, settings } = useProjectStore();
   const [selectedBlockIndex, setSelectedBlockIndex] = useState<number | null>(null);
   const [saveIndicator, setSaveIndicator] = useState<'saved' | 'saving' | 'unsaved'>('saved');
   const saveTimerRef = useRef<number | null>(null);
@@ -849,7 +903,11 @@ export function ScreenplayEditor({ mode = 'normal', readOnly = false }: { mode?:
       </div>
 
       {/* Blocks */}
-      <div ref={blocksContainerRef} className="flex-1 overflow-y-auto px-16 py-8 max-w-3xl mx-auto w-full">
+      <div
+        ref={blocksContainerRef}
+        className="flex-1 overflow-y-auto px-16 py-8 max-w-3xl mx-auto w-full"
+        style={{ fontSize: `${settings.editorFontSize}pt`, lineHeight: settings.lineHeight }}
+      >
         {currentScene.blocks.map((block, i) => {
           const props: BlockProps = {
             block,
@@ -858,6 +916,8 @@ export function ScreenplayEditor({ mode = 'normal', readOnly = false }: { mode?:
             readOnly,
             characterNames,
             characterColors,
+            charEntries: charIndex,
+            dialogueAlignment: settings.dialogueAlignment,
             onSelect: setSelectedBlockIndex,
             onChange: (idx, b) => { handleBlockChange(idx, b); handleBlockInput(idx, 'text' in b ? b.text : ''); },
             onKeyDown: handleBlockKeyDown,

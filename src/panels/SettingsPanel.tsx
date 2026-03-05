@@ -230,9 +230,11 @@ export function SettingsPanel() {
               ['Ctrl+F', '찾기'],
               ['Ctrl+H', '찾기 및 바꾸기'],
               ['Ctrl+G', '씬 번호로 이동'],
+              ['Ctrl+Shift+\\', '씬 분할 (선택 블록 기준)'],
               ['/', '슬래시 메뉴'],
               ['F', '집중 모드'],
               ['R', '읽기 모드'],
+              ['T', '타자기 모드'],
             ].map(([key, desc]) => (
               <div key={key} className="flex items-center justify-between py-1.5 border-b border-gray-800">
                 <span className="text-xs text-gray-400">{desc}</span>

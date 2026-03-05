@@ -4,6 +4,8 @@ import { useSceneStore } from '../store/sceneStore';
 import { useCharacterStore } from '../store/characterStore';
 import { useProjectStore } from '../store/projectStore';
 import { fileIO } from '../io';
+import { SlashMenu, type SlashMenuItem } from './widgets/SlashMenu';
+import { AIFloatingToolbar } from './widgets/AIFloatingToolbar';
 
 // ── Block rendering components ──────────────────────────────────────────────
 
@@ -281,12 +283,48 @@ function createEmptyBlock(type: SceneBlock['type']): SceneBlock {
 }
 
 export function ScreenplayEditor() {
-  const { currentScene, updateCurrentScene, markDirty } = useSceneStore();
-  const { index: charIndex, characters } = useCharacterStore();
+  const { currentScene, updateCurrentScene } = useSceneStore();
+  const { index: charIndex } = useCharacterStore();
   const { dirHandle, autoSave } = useProjectStore();
   const [selectedBlockIndex, setSelectedBlockIndex] = useState<number | null>(null);
   const [saveIndicator, setSaveIndicator] = useState<'saved' | 'saving' | 'unsaved'>('saved');
   const saveTimerRef = useRef<number | null>(null);
+
+  // Slash menu state
+  const [slashAnchor, setSlashAnchor] = useState<HTMLElement | null>(null);
+  const [slashQuery, setSlashQuery] = useState('');
+  const [slashBlockIndex, setSlashBlockIndex] = useState<number | null>(null);
+
+  // AI toolbar state
+  const [aiSelection, setAISelection] = useState<{
+    text: string;
+    rect: DOMRect;
+    blockIndex: number;
+    block: SceneBlock;
+  } | null>(null);
+
+  // Handle text selection for AI toolbar
+  const handleSelectionChange = useCallback(() => {
+    const selection = window.getSelection();
+    if (!selection || selection.isCollapsed || !selection.toString().trim()) {
+      return;
+    }
+    const range = selection.getRangeAt(0);
+    const rect = range.getBoundingClientRect();
+    if (rect.width > 0 && selectedBlockIndex !== null && currentScene) {
+      setAISelection({
+        text: selection.toString(),
+        rect,
+        blockIndex: selectedBlockIndex,
+        block: currentScene.blocks[selectedBlockIndex],
+      });
+    }
+  }, [selectedBlockIndex, currentScene]);
+
+  useEffect(() => {
+    document.addEventListener('selectionchange', handleSelectionChange);
+    return () => document.removeEventListener('selectionchange', handleSelectionChange);
+  }, [handleSelectionChange]);
 
   const characterNames = Object.fromEntries(
     charIndex.map((c) => [c.id, c.name])
@@ -356,43 +394,114 @@ export function ScreenplayEditor() {
     scheduleAutosave();
   };
 
+  const insertBlock = useCallback((atIndex: number, type: SceneBlock['type']) => {
+    const newBlock = createEmptyBlock(type);
+    const newBlocks = [...currentScene!.blocks];
+    newBlocks.splice(atIndex + 1, 0, newBlock);
+    updateCurrentScene({ ...currentScene!, blocks: newBlocks });
+    setSelectedBlockIndex(atIndex + 1);
+  }, [currentScene, updateCurrentScene]);
+
+  const handleSlashMenuSelect = useCallback((item: SlashMenuItem) => {
+    setSlashAnchor(null);
+    setSlashQuery('');
+    if (slashBlockIndex === null || !currentScene) return;
+
+    if (item.blockType === 'scene') {
+      // New scene — trigger scene navigator add
+      window.dispatchEvent(new CustomEvent('scenaria:addScene'));
+      return;
+    }
+    if (item.blockType === 'foreshadowing' || item.blockType === 'payoff') {
+      // TODO: insert foreshadowing marker
+      return;
+    }
+    // Replace current empty block with selected type
+    const block = currentScene.blocks[slashBlockIndex];
+    if (isBlockEmpty(block)) {
+      handleBlockChange(slashBlockIndex, createEmptyBlock(item.blockType as SceneBlock['type']));
+    } else {
+      insertBlock(slashBlockIndex, item.blockType as SceneBlock['type']);
+    }
+  }, [slashBlockIndex, currentScene, insertBlock]);
+
   const handleBlockKeyDown = (e: React.KeyboardEvent, index: number) => {
-    const block = currentScene.blocks[index];
+    const block = currentScene!.blocks[index];
+
+    // Slash menu trigger
+    if (e.key === '/' && isBlockEmpty(block)) {
+      setSlashAnchor(e.currentTarget as HTMLElement);
+      setSlashQuery('');
+      setSlashBlockIndex(index);
+      return;
+    }
+
+    // Close slash menu on Escape or space
+    if (slashAnchor) {
+      if (e.key === 'Escape' || e.key === ' ') {
+        setSlashAnchor(null);
+        setSlashQuery('');
+      }
+      return; // Let SlashMenu handle ArrowUp/Down/Enter
+    }
 
     if (e.key === 'Tab' && !e.shiftKey) {
       e.preventDefault();
-      const nextType = getNextBlockType(block, currentScene.blocks, index);
-      const newBlock = createEmptyBlock(nextType);
-      const newBlocks = [...currentScene.blocks];
-      newBlocks.splice(index + 1, 0, newBlock);
-      updateCurrentScene({ ...currentScene, blocks: newBlocks });
-      setSelectedBlockIndex(index + 1);
+      const nextType = getNextBlockType(block, currentScene!.blocks, index);
+      insertBlock(index, nextType);
     } else if (e.key === 'Tab' && e.shiftKey) {
       e.preventDefault();
-      // Cycle backward through block types
       const types: SceneBlock['type'][] = ['action', 'character', 'dialogue', 'parenthetical', 'transition'];
       const currentTypeIdx = types.indexOf(block.type);
       const prevType = types[(currentTypeIdx - 1 + types.length) % types.length];
       handleBlockChange(index, createEmptyBlock(prevType));
-    } else if (e.key === 'F2') {
-      // Block type change — TODO: show type picker menu
+    } else if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+      // Ctrl+Enter: repeat last character's dialogue
+      e.preventDefault();
+      const prevChar = [...currentScene!.blocks].slice(0, index).reverse().find(b => b.type === 'character') as CharacterBlock | undefined;
+      if (prevChar) {
+        const newBlocks = [...currentScene!.blocks];
+        newBlocks.splice(index + 1, 0, { ...prevChar } as CharacterBlock);
+        newBlocks.splice(index + 2, 0, createEmptyBlock('dialogue'));
+        updateCurrentScene({ ...currentScene!, blocks: newBlocks });
+        setSelectedBlockIndex(index + 2);
+      }
+    } else if (e.key === 'Enter' && !e.shiftKey && block.type === 'dialogue') {
+      e.preventDefault();
+      insertBlock(index, 'action');
     } else if (e.key === 'Backspace' && isBlockEmpty(block)) {
       e.preventDefault();
-      if (currentScene.blocks.length > 1) {
-        const newBlocks = currentScene.blocks.filter((_, i) => i !== index);
-        updateCurrentScene({ ...currentScene, blocks: newBlocks });
+      if (currentScene!.blocks.length > 1) {
+        const newBlocks = currentScene!.blocks.filter((_, i) => i !== index);
+        updateCurrentScene({ ...currentScene!, blocks: newBlocks });
         setSelectedBlockIndex(Math.max(0, index - 1));
       }
     }
   };
 
+  // Handle input in blocks to track slash queries
+  const handleBlockInput = useCallback((index: number, value: string) => {
+    if (slashAnchor && slashBlockIndex === index) {
+      const slashPos = value.indexOf('/');
+      if (slashPos >= 0) {
+        setSlashQuery(value.slice(slashPos + 1));
+      } else {
+        setSlashAnchor(null);
+        setSlashQuery('');
+      }
+    }
+  }, [slashAnchor, slashBlockIndex]);
+
   return (
-    <div className="flex-1 flex flex-col overflow-hidden bg-gray-950">
+    <div className="flex-1 flex flex-col overflow-hidden bg-gray-950" onClick={() => setAISelection(null)}>
       {/* Scene header */}
       <SceneHeader scene={currentScene} onChange={handleHeaderChange} />
 
       {/* Save indicator */}
-      <div className="flex justify-end px-4 py-1">
+      <div className="flex justify-end items-center gap-3 px-4 py-1">
+        <span className="text-xs text-gray-700">
+          / 슬래시로 블록 선택 · Tab 다음 블록 · Ctrl+Enter 대사 반복
+        </span>
         <span className={`text-xs ${
           saveIndicator === 'saved' ? 'text-gray-700' :
           saveIndicator === 'saving' ? 'text-yellow-600' : 'text-red-600'
@@ -412,12 +521,31 @@ export function ScreenplayEditor() {
             characterNames,
             characterColors,
             onSelect: setSelectedBlockIndex,
-            onChange: handleBlockChange,
+            onChange: (idx, b) => { handleBlockChange(idx, b); handleBlockInput(idx, 'text' in b ? b.text : ''); },
             onKeyDown: handleBlockKeyDown,
           };
           return (
-            <div key={i} className="mb-1">
+            <div key={i} className="mb-1 relative group">
               {renderBlock(props)}
+              {/* Per-block AI alternative button */}
+              {(block.type === 'dialogue' || block.type === 'action') && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    const rect = e.currentTarget.getBoundingClientRect();
+                    setAISelection({
+                      text: 'text' in block ? block.text : '',
+                      rect,
+                      blockIndex: i,
+                      block,
+                    });
+                  }}
+                  title="AI 대안 생성"
+                  className="absolute left-0 top-1/2 -translate-y-1/2 -translate-x-6 opacity-0 group-hover:opacity-100 transition-opacity text-xs text-gray-600 hover:text-blue-400 w-5 h-5 flex items-center justify-center"
+                >
+                  🔀
+                </button>
+              )}
             </div>
           );
         })}
@@ -433,10 +561,36 @@ export function ScreenplayEditor() {
             }}
             className="text-gray-700 hover:text-gray-500 text-sm font-mono transition-colors"
           >
-            + 블록 추가
+            + 블록 추가 (또는 / 입력)
           </button>
         </div>
       </div>
+
+      {/* Slash menu */}
+      <SlashMenu
+        anchorEl={slashAnchor}
+        query={slashQuery}
+        onSelect={handleSlashMenuSelect}
+        onClose={() => { setSlashAnchor(null); setSlashQuery(''); }}
+      />
+
+      {/* AI floating toolbar */}
+      {aiSelection && (
+        <AIFloatingToolbar
+          selectedText={aiSelection.text}
+          anchorRect={aiSelection.rect}
+          sceneId={currentScene.id}
+          blockIndex={aiSelection.blockIndex}
+          originalBlock={aiSelection.block}
+          onApply={(newText) => {
+            const block = currentScene.blocks[aiSelection.blockIndex];
+            if ('text' in block) {
+              handleBlockChange(aiSelection.blockIndex, { ...block, text: newText } as SceneBlock);
+            }
+          }}
+          onClose={() => setAISelection(null)}
+        />
+      )}
     </div>
   );
 }

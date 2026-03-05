@@ -508,6 +508,10 @@ export function ScreenplayEditor({ mode = 'normal', readOnly = false }: { mode?:
     container.scrollBy({ top: offset, behavior: 'smooth' });
   }, [selectedBlockIndex, mode]);
 
+  // Block drag-to-reorder state
+  const [dragBlockIndex, setDragBlockIndex] = useState<number | null>(null);
+  const [dragOverBlockIndex, setDragOverBlockIndex] = useState<number | null>(null);
+
   // Slash menu state
   const [slashAnchor, setSlashAnchor] = useState<HTMLElement | null>(null);
   const [slashQuery, setSlashQuery] = useState('');
@@ -606,6 +610,19 @@ export function ScreenplayEditor({ mode = 'normal', readOnly = false }: { mode?:
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     saveTimerRef.current = window.setTimeout(saveScene, 2000);
   }, [saveScene]);
+
+  const handleBlockDragEnd = useCallback(() => {
+    if (dragBlockIndex !== null && dragOverBlockIndex !== null && dragBlockIndex !== dragOverBlockIndex) {
+      const newBlocks = [...currentScene!.blocks];
+      const [moved] = newBlocks.splice(dragBlockIndex, 1);
+      newBlocks.splice(dragOverBlockIndex, 0, moved);
+      updateCurrentScene({ ...currentScene!, blocks: newBlocks });
+      setSelectedBlockIndex(dragOverBlockIndex);
+      scheduleAutosave();
+    }
+    setDragBlockIndex(null);
+    setDragOverBlockIndex(null);
+  }, [dragBlockIndex, dragOverBlockIndex, currentScene, updateCurrentScene, scheduleAutosave]);
 
   // Ctrl+S
   useEffect(() => {
@@ -787,7 +804,27 @@ export function ScreenplayEditor({ mode = 'normal', readOnly = false }: { mode?:
             onKeyDown: handleBlockKeyDown,
           };
           return (
-            <div key={i} data-block-index={i} className="mb-1 relative group">
+            <div
+              key={i}
+              data-block-index={i}
+              draggable={!readOnly}
+              onDragStart={() => setDragBlockIndex(i)}
+              onDragOver={(e) => { e.preventDefault(); setDragOverBlockIndex(i); }}
+              onDrop={handleBlockDragEnd}
+              onDragEnd={handleBlockDragEnd}
+              className={`mb-1 relative group transition-all ${
+                dragOverBlockIndex === i && dragBlockIndex !== i ? 'border-t-2 border-blue-500' : ''
+              }`}
+            >
+              {/* Drag handle */}
+              {!readOnly && (
+                <span
+                  className="absolute -left-5 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity text-gray-700 hover:text-gray-400 cursor-grab active:cursor-grabbing select-none text-xs"
+                  title="드래그하여 순서 변경"
+                >
+                  ⠿
+                </span>
+              )}
               {renderBlock(props)}
               {/* Per-block AI alternative button */}
               {(block.type === 'dialogue' || block.type === 'action') && (

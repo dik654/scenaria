@@ -6,17 +6,21 @@ import { CharacterNetwork } from '../visualizations/CharacterNetwork';
 import { StoryClock } from '../visualizations/StoryClock';
 import { ForeshadowingManager } from '../visualizations/ForeshadowingManager';
 import { SceneDashboard } from '../visualizations/SceneDashboard';
+import { BeatBoard } from '../visualizations/BeatBoard';
+import { PlotThreadTimeline } from '../visualizations/PlotThreadTimeline';
 import { useSceneStore } from '../store/sceneStore';
 import { fileIO } from '../io';
 import { useProjectStore } from '../store/projectStore';
 import type { Scene } from '../types/scene';
 
-type PlotView = 'dashboard' | 'tension' | 'clock' | 'cards' | 'presence' | 'network' | 'foreshadowing';
+type PlotView = 'dashboard' | 'tension' | 'clock' | 'cards' | 'presence' | 'network' | 'foreshadowing' | 'beats' | 'threads';
 
 const VIEW_CONFIG: { id: PlotView; label: string; icon: string }[] = [
   { id: 'dashboard',     label: '대시보드',     icon: '📊' },
   { id: 'tension',       label: '긴장도',       icon: '📈' },
   { id: 'clock',         label: '스토리클록',   icon: '🕐' },
+  { id: 'beats',         label: '비트 보드',    icon: '🎯' },
+  { id: 'threads',       label: '플롯 스레드',  icon: '🧵' },
   { id: 'cards',         label: '씬 카드',      icon: '🃏' },
   { id: 'presence',      label: '캐릭터 등장',  icon: '👥' },
   { id: 'network',       label: '관계 네트워크', icon: '🕸️' },
@@ -65,6 +69,8 @@ export function StoryPanel() {
         {activeView === 'dashboard'     && <SceneDashboard />}
         {activeView === 'tension'       && <TensionFlow onSceneClick={handleSceneSelect} />}
         {activeView === 'clock'         && <StoryClock />}
+        {activeView === 'beats'         && <BeatBoard onSceneSelect={handleSceneSelect} />}
+        {activeView === 'threads'       && <PlotThreadTimeline onSceneSelect={handleSceneSelect} />}
         {activeView === 'cards'         && <SceneCardBoard onSceneSelect={handleSceneSelect} />}
         {activeView === 'presence'      && <CharacterPresence />}
         {activeView === 'network'       && <CharacterNetwork onCharacterClick={() => {}} />}

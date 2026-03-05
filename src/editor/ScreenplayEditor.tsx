@@ -297,6 +297,19 @@ export function ScreenplayEditor({ mode = 'normal', readOnly = false }: { mode?:
   const [selectedBlockIndex, setSelectedBlockIndex] = useState<number | null>(null);
   const [saveIndicator, setSaveIndicator] = useState<'saved' | 'saving' | 'unsaved'>('saved');
   const saveTimerRef = useRef<number | null>(null);
+  const blocksContainerRef = useRef<HTMLDivElement>(null);
+
+  // Typewriter mode: scroll selected block to vertical center
+  useEffect(() => {
+    if (mode !== 'typewriter' || selectedBlockIndex === null || !blocksContainerRef.current) return;
+    const container = blocksContainerRef.current;
+    const el = container.querySelector<HTMLElement>(`[data-block-index="${selectedBlockIndex}"]`);
+    if (!el) return;
+    const containerRect = container.getBoundingClientRect();
+    const elRect = el.getBoundingClientRect();
+    const offset = elRect.top - containerRect.top - containerRect.height / 2 + elRect.height / 2;
+    container.scrollBy({ top: offset, behavior: 'smooth' });
+  }, [selectedBlockIndex, mode]);
 
   // Slash menu state
   const [slashAnchor, setSlashAnchor] = useState<HTMLElement | null>(null);
@@ -520,7 +533,7 @@ export function ScreenplayEditor({ mode = 'normal', readOnly = false }: { mode?:
       </div>
 
       {/* Blocks */}
-      <div className="flex-1 overflow-y-auto px-16 py-8 max-w-3xl mx-auto w-full">
+      <div ref={blocksContainerRef} className="flex-1 overflow-y-auto px-16 py-8 max-w-3xl mx-auto w-full">
         {currentScene.blocks.map((block, i) => {
           const props: BlockProps = {
             block,

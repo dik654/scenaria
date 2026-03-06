@@ -1,10 +1,12 @@
-import { useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 import { useProjectStore } from '../../store/projectStore';
 import { useAIHistoryStore } from '../../store/aiHistoryStore';
 import { nanoid } from 'nanoid';
 import type { SceneBlock } from '../../types/scene';
-import { InlineDiff } from './InlineDiff';
 import { callAI } from '../../ai/aiClient';
+import { ToolbarButton } from './aiToolbar/ToolbarButton';
+import { AlternativeCard } from './aiToolbar/AlternativeCard';
+import { ModifyMode, FreeformMode, QuickActionsMode } from './aiToolbar/ModeViews';
 
 interface AIFloatingToolbarProps {
   selectedText: string;
@@ -27,14 +29,14 @@ interface Alternative {
 
 type ToolbarMode = 'idle' | 'modify' | 'alternatives' | 'freeform' | 'quickactions';
 
-const QUICK_ACTIONS = [
+const DEFAULT_QUICK_ACTIONS = [
   { id: 'honorific', label: '존댓말 ↔ 반말', prompt: '이 대사를 반말로 바꿔주세요. (이미 반말이면 존댓말로)' },
-  { id: 'shorten', label: '대사 줄이기 (50%)', prompt: '이 내용을 절반 길이로 줄여주세요.' },
+  { id: 'shorten',   label: '대사 줄이기 (50%)', prompt: '이 내용을 절반 길이로 줄여주세요.' },
   { id: 'emotional', label: '더 감정적으로', prompt: '이 내용을 더 감정적으로 만들어주세요.' },
-  { id: 'dry', label: '더 건조하게', prompt: '이 내용을 더 건조하고 사무적으로 만들어주세요.' },
-  { id: 'show', label: '대사→지문', prompt: '이 대사를 "보여주기(show)"로 지문으로 변환해주세요.' },
-  { id: 'subtext', label: '서브텍스트 추가', prompt: '이 대사에 서브텍스트를 추가해주세요.' },
-  { id: 'visual', label: '시각적으로 묘사', prompt: '이 내용을 더 시각적으로 묘사해주세요.' },
+  { id: 'dry',       label: '더 건조하게', prompt: '이 내용을 더 건조하고 사무적으로 만들어주세요.' },
+  { id: 'show',      label: '대사→지문', prompt: '이 대사를 "보여주기(show)"로 지문으로 변환해주세요.' },
+  { id: 'subtext',   label: '서브텍스트 추가', prompt: '이 대사에 서브텍스트를 추가해주세요.' },
+  { id: 'visual',    label: '시각적으로 묘사', prompt: '이 내용을 더 시각적으로 묘사해주세요.' },
 ];
 
 function getBlockText(block: SceneBlock): string {
@@ -45,14 +47,7 @@ function getBlockText(block: SceneBlock): string {
 }
 
 export function AIFloatingToolbar({
-  selectedText,
-  anchorRect,
-  sceneId,
-  blockIndex,
-  originalBlock,
-  contextMarkdown,
-  onApply,
-  onClose,
+  selectedText, anchorRect, sceneId, blockIndex, originalBlock, contextMarkdown, onApply, onClose,
 }: AIFloatingToolbarProps) {
   const { settings } = useProjectStore();
   const { addEntry, markApplied } = useAIHistoryStore();
@@ -63,15 +58,8 @@ export function AIFloatingToolbar({
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [currentEntryId, setCurrentEntryId] = useState<string | null>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
 
   const originalText = getBlockText(originalBlock);
-
-  useEffect(() => {
-    if (mode === 'modify' || mode === 'freeform') {
-      setTimeout(() => inputRef.current?.focus(), 50);
-    }
-  }, [mode]);
 
   const invokeAI = async (prompt: string): Promise<string[]> => {
     const systemPrompt = [
@@ -81,10 +69,7 @@ export function AIFloatingToolbar({
       '원본 텍스트의 언어와 형식을 유지하세요.',
       ...(contextMarkdown ? ['\n## 씬 컨텍스트 (참고용)\n', contextMarkdown] : []),
     ].join('\n');
-
-    const userPrompt = `원본:\n${selectedText || originalText}\n\n지시:\n${prompt}\n\n3가지 버전을 JSON 배열로:`;
-
-    return callAI(settings.ai, systemPrompt, userPrompt, 3);
+    return callAI(settings.ai, systemPrompt, `원본:\n${selectedText || originalText}\n\n지시:\n${prompt}\n\n3가지 버전을 JSON 배열로:`, 3);
   };
 
   const handleGenerateAlternatives = async (promptOverride?: string) => {
@@ -96,31 +81,16 @@ export function AIFloatingToolbar({
       { id: nanoid(), content: '', tone: '최소 변경', isLoading: true },
     ];
     setAlternatives(alts);
-
+    setMode('alternatives');
     try {
-      const prompt = promptOverride
-        ?? `아래 텍스트의 대안 3가지를 작성하세요:\nA: 비슷하지만 더 세련되게\nB: 완전히 다른 접근\nC: 최소한의 변경`;
-
+      const prompt = promptOverride ?? `아래 텍스트의 대안 3가지를 작성하세요:\nA: 비슷하지만 더 세련되게\nB: 완전히 다른 접근\nC: 최소한의 변경`;
       const results = await invokeAI(prompt);
       const tones = ['세련되게', '다른 접근', '최소 변경'];
-      const filled = alts.map((a, i) => ({
-        ...a,
-        content: results[i] ?? results[0] ?? originalText,
-        isLoading: false,
-        tone: tones[i],
-      }));
+      const filled = alts.map((a, i) => ({ ...a, content: results[i] ?? results[0] ?? originalText, isLoading: false, tone: tones[i] }));
       setAlternatives(filled);
-
       const entryId = nanoid();
       setCurrentEntryId(entryId);
-      addEntry({
-        sceneId,
-        blockIndex,
-        original: originalText,
-        alternatives: filled.map((a) => ({ id: a.id, content: a.content, tone: a.tone, applied: false })),
-        appliedId: null,
-        instruction: prompt,
-      });
+      addEntry({ sceneId, blockIndex, original: originalText, alternatives: filled.map((a) => ({ id: a.id, content: a.content, tone: a.tone, applied: false })), appliedId: null, instruction: prompt });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'AI 호출 실패');
       setAlternatives([]);
@@ -143,12 +113,6 @@ export function AIFloatingToolbar({
     }
   };
 
-  const handleApplyModified = () => {
-    if (!modifiedText) return;
-    onApply(modifiedText);
-    onClose();
-  };
-
   const handleApplyAlternative = (alt: Alternative) => {
     onApply(alt.content);
     if (currentEntryId) markApplied(currentEntryId, alt.id);
@@ -159,21 +123,19 @@ export function AIFloatingToolbar({
 
   const top = anchorRect.top - 48;
   const left = Math.max(8, Math.min(anchorRect.left, window.innerWidth - 420));
+  const quickActions = settings.quickActions?.length ? settings.quickActions : DEFAULT_QUICK_ACTIONS;
 
   return (
     <>
-      {/* Backdrop */}
       <div className="fixed inset-0 z-40" onClick={onClose} />
 
-      {/* Main toolbar */}
-      <div
-        style={{ position: 'fixed', top, left, zIndex: 50 }}
+      <div style={{ position: 'fixed', top, left, zIndex: 50 }}
         className="bg-gray-900 border border-gray-700 rounded-xl shadow-2xl overflow-hidden"
       >
         {mode === 'idle' && (
           <div className="flex items-center gap-0.5 p-1">
             <ToolbarButton icon="✏️" label="수정" onClick={() => setMode('modify')} />
-            <ToolbarButton icon="🔀" label="대안 3개" onClick={() => { setMode('alternatives'); handleGenerateAlternatives(); }} />
+            <ToolbarButton icon="🔀" label="대안 3개" onClick={() => handleGenerateAlternatives()} />
             <ToolbarButton icon="💬" label="자유 지시" onClick={() => setMode('freeform')} />
             <div className="w-px h-6 bg-gray-700 mx-0.5" />
             <ToolbarButton icon="⚡" label="빠른" onClick={() => setMode('quickactions')} hasArrow />
@@ -181,107 +143,50 @@ export function AIFloatingToolbar({
         )}
 
         {mode === 'modify' && (
-          <div className="p-3 w-80">
-            <div className="flex items-center gap-2 mb-2">
-              <span className="text-xs text-gray-400">✏️ 수정 지시</span>
-              <button onClick={() => setMode('idle')} className="ml-auto text-gray-600 hover:text-gray-400 text-xs">✕</button>
-            </div>
-            <input
-              ref={inputRef}
-              value={instruction}
-              onChange={(e) => setInstruction(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleModify()}
-              placeholder="예: 더 긴박하게, 말투를 바꿔서..."
-              className="w-full bg-gray-800 border border-gray-600 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-red-500 mb-2"
-            />
-            {error && <p className="text-xs text-red-400 mb-2">{error}</p>}
-            {modifiedText ? (
-              <>
-                <InlineDiff original={originalText} modified={modifiedText} />
-                <div className="flex gap-2 mt-2">
-                  <button onClick={() => setModifiedText(null)} className="flex-1 text-xs py-1.5 border border-gray-600 rounded-lg text-gray-400 hover:bg-gray-800">취소</button>
-                  <button onClick={handleApplyModified} className="flex-1 text-xs py-1.5 bg-green-700 rounded-lg text-white hover:bg-green-600">적용</button>
-                </div>
-              </>
-            ) : (
-              <button
-                onClick={handleModify}
-                disabled={!instruction.trim() || isLoading}
-                className="w-full text-xs py-2 bg-red-600 rounded-lg text-white hover:bg-red-700 disabled:opacity-50"
-              >
-                {isLoading ? '생성 중...' : 'AI에게 수정 요청'}
-              </button>
-            )}
-          </div>
+          <ModifyMode
+            instruction={instruction}
+            onInstruction={setInstruction}
+            modifiedText={modifiedText}
+            originalText={originalText}
+            isLoading={isLoading}
+            error={error}
+            onModify={handleModify}
+            onApply={() => { if (modifiedText) { onApply(modifiedText); onClose(); } }}
+            onCancel={() => setModifiedText(null)}
+            onClose={() => setMode('idle')}
+          />
         )}
 
         {mode === 'freeform' && (
-          <div className="p-3 w-80">
-            <div className="flex items-center gap-2 mb-2">
-              <span className="text-xs text-gray-400">💬 자유 지시</span>
-              <button onClick={() => setMode('idle')} className="ml-auto text-gray-600 hover:text-gray-400 text-xs">✕</button>
-            </div>
-            <input
-              ref={inputRef}
-              value={instruction}
-              onChange={(e) => setInstruction(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && handleGenerateAlternatives(instruction)}
-              placeholder="자유롭게 지시하세요..."
-              className="w-full bg-gray-800 border border-gray-600 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-red-500 mb-2"
-            />
-            {error && <p className="text-xs text-red-400 mb-2">{error}</p>}
-            <button
-              onClick={() => handleGenerateAlternatives(instruction)}
-              disabled={!instruction.trim() || isLoading}
-              className="w-full text-xs py-2 bg-red-600 rounded-lg text-white hover:bg-red-700 disabled:opacity-50"
-            >
-              {isLoading ? '생성 중...' : '대안 생성'}
-            </button>
-          </div>
+          <FreeformMode
+            instruction={instruction}
+            onInstruction={setInstruction}
+            isLoading={isLoading}
+            error={error}
+            onGenerate={() => handleGenerateAlternatives(instruction)}
+            onClose={() => setMode('idle')}
+          />
         )}
 
         {mode === 'quickactions' && (
-          <div className="w-52 py-1">
-            {(settings.quickActions?.length ? settings.quickActions : QUICK_ACTIONS).map((qa) => (
-              <button
-                key={qa.id}
-                onClick={() => { setMode('alternatives'); handleGenerateAlternatives(qa.prompt); }}
-                className="w-full text-left px-3 py-2 text-sm text-gray-300 hover:bg-gray-700 hover:text-white transition-colors"
-              >
-                {qa.label}
-              </button>
-            ))}
-            <div className="border-t border-gray-700 mt-1 pt-1">
-              <button onClick={() => setMode('idle')} className="w-full text-left px-3 py-1.5 text-xs text-gray-600 hover:text-gray-400">← 뒤로</button>
-            </div>
-          </div>
+          <QuickActionsMode
+            actions={quickActions}
+            onSelect={(prompt) => handleGenerateAlternatives(prompt)}
+            onClose={() => setMode('idle')}
+          />
         )}
       </div>
 
-      {/* Alternatives panel */}
       {mode === 'alternatives' && (alternatives.length > 0 || isLoading) && (
-        <div
-          style={{
-            position: 'fixed',
-            top: anchorRect.bottom + 8,
-            left: Math.max(8, Math.min(anchorRect.left - 16, window.innerWidth - 900)),
-            zIndex: 50,
-          }}
-          className="flex gap-3"
-        >
-          {/* Original */}
-          <AlternativeCard
-            label="현재"
-            tone="원본"
-            content={originalText}
-            isCurrent
-            onApply={() => onClose()}
-          />
-          {/* Alternatives */}
+        <div style={{
+          position: 'fixed',
+          top: anchorRect.bottom + 8,
+          left: Math.max(8, Math.min(anchorRect.left - 16, window.innerWidth - 900)),
+          zIndex: 50,
+        }} className="flex gap-3">
+          <AlternativeCard label="현재" tone="원본" content={originalText} isCurrent onApply={() => onClose()} />
           {isLoading && alternatives.length === 0
-            ? [0, 1, 2].map((i) => (
-                <AlternativeCard key={i} label={`대안 ${String.fromCharCode(65 + i)}`} tone="..." content="" isLoading />
-              ))
+            ? [0, 1, 2].map((i) => <AlternativeCard key={i} label={`대안 ${String.fromCharCode(65 + i)}`} tone="..." content="" isLoading />)
             : alternatives.map((alt, i) => (
                 <AlternativeCard
                   key={alt.id}
@@ -296,55 +201,5 @@ export function AIFloatingToolbar({
         </div>
       )}
     </>
-  );
-}
-
-function ToolbarButton({ icon, label, onClick, hasArrow }: {
-  icon: string; label: string; onClick: () => void; hasArrow?: boolean;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs text-gray-300 hover:bg-gray-700 hover:text-white transition-colors"
-    >
-      <span>{icon}</span>
-      <span>{label}</span>
-      {hasArrow && <span className="text-gray-600">▾</span>}
-    </button>
-  );
-}
-
-function AlternativeCard({ label, tone, content, isCurrent, isLoading, onApply }: {
-  label: string; tone: string; content: string; isCurrent?: boolean; isLoading?: boolean; onApply?: () => void;
-}) {
-  return (
-    <div className={`w-52 bg-gray-900 border rounded-xl p-3 shadow-xl flex flex-col gap-2 ${isCurrent ? 'border-gray-600' : 'border-gray-700'}`}>
-      <div className="flex items-center justify-between">
-        <span className="text-xs font-medium text-gray-400">{label}</span>
-        <span className="text-xs text-gray-600 bg-gray-800 px-1.5 py-0.5 rounded-full">{tone}</span>
-      </div>
-      <div className="flex-1 min-h-16">
-        {isLoading ? (
-          <div className="animate-pulse space-y-1">
-            <div className="h-2 bg-gray-700 rounded w-full" />
-            <div className="h-2 bg-gray-700 rounded w-4/5" />
-            <div className="h-2 bg-gray-700 rounded w-3/5" />
-          </div>
-        ) : (
-          <p className="text-xs text-gray-200 leading-relaxed whitespace-pre-wrap break-words">{content}</p>
-        )}
-      </div>
-      {!isCurrent && !isLoading && onApply && (
-        <button
-          onClick={onApply}
-          className="w-full text-xs py-1.5 bg-green-700 hover:bg-green-600 text-white rounded-lg transition-colors"
-        >
-          적용
-        </button>
-      )}
-      {isCurrent && (
-        <div className="text-center text-xs text-gray-600">✓ 현재</div>
-      )}
-    </div>
   );
 }

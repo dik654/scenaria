@@ -4,6 +4,7 @@ import { STATUS_LABELS, STATUS_BG_BUTTON, STATUS_BG_ACTIVE } from '../utils/stat
 import type { SceneStatus } from '../types/scene';
 import { useProjectStore } from '../store/projectStore';
 import { callAI } from '../ai/aiClient';
+import { TagInput } from '../components/TagInput';
 
 const TONE_OPTIONS = [
   '희망적', '긴장', '슬픔', '분노', '두려움', '기쁨',
@@ -25,53 +26,6 @@ function tensionLabel(level: number): string {
   if (level <= 6) return '보통';
   if (level <= 8) return '긴장';
   return '폭발';
-}
-
-function TagInput({ tags, onChange, readOnly }: {
-  tags: string[];
-  onChange: (tags: string[]) => void;
-  readOnly: boolean;
-}) {
-  const [inputValue, setInputValue] = useState('');
-
-  const addTag = (value: string) => {
-    const tag = value.trim();
-    if (!tag || tags.includes(tag)) { setInputValue(''); return; }
-    onChange([...tags, tag]);
-    setInputValue('');
-  };
-
-  return (
-    <div className="flex flex-wrap gap-1.5 items-center min-h-7 bg-gray-900 border border-gray-700 rounded px-2 py-1">
-      {tags.map((tag) => (
-        <span key={tag} className="flex items-center gap-1 bg-gray-700 rounded-full px-2 py-0.5 text-xs text-gray-300">
-          {tag}
-          {!readOnly && (
-            <button
-              onClick={() => onChange(tags.filter((t) => t !== tag))}
-              className="text-gray-500 hover:text-red-400 transition-colors leading-none"
-            >
-              ×
-            </button>
-          )}
-        </span>
-      ))}
-      {!readOnly && (
-        <input
-          type="text"
-          value={inputValue}
-          onChange={(e) => setInputValue(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' || e.key === ',') { e.preventDefault(); addTag(inputValue); }
-            if (e.key === 'Backspace' && !inputValue && tags.length > 0) onChange(tags.slice(0, -1));
-          }}
-          onBlur={() => inputValue && addTag(inputValue)}
-          placeholder={tags.length === 0 ? '태그 입력 후 Enter' : ''}
-          className="bg-transparent text-xs text-gray-300 focus:outline-none min-w-20 placeholder-gray-700"
-        />
-      )}
-    </div>
-  );
 }
 
 export function SceneMetaPane({ scene, onChange, readOnly }: {
@@ -120,7 +74,6 @@ export function SceneMetaPane({ scene, onChange, readOnly }: {
 
   return (
     <div className="border-t border-gray-800 bg-gray-950 flex-shrink-0">
-      {/* Collapsed bar */}
       <button
         onClick={() => setExpanded(!expanded)}
         className="w-full flex items-center gap-3 px-4 py-1.5 text-xs text-gray-600 hover:text-gray-400 transition-colors"
@@ -144,10 +97,8 @@ export function SceneMetaPane({ scene, onChange, readOnly }: {
         <span>{expanded ? '▲' : '▼'}</span>
       </button>
 
-      {/* Expanded */}
       {expanded && (
         <div className="px-4 py-3 space-y-3 border-t border-gray-800/50">
-          {/* Status */}
           <div>
             <label className="text-xs text-gray-500 block mb-1">작성 상태</label>
             <div className="flex gap-1">
@@ -167,7 +118,6 @@ export function SceneMetaPane({ scene, onChange, readOnly }: {
             </div>
           </div>
 
-          {/* Summary */}
           <div>
             <div className="flex items-center justify-between mb-1">
               <label className="text-xs text-gray-500">씬 요약 / 메모</label>
@@ -192,7 +142,6 @@ export function SceneMetaPane({ scene, onChange, readOnly }: {
             />
           </div>
 
-          {/* Tension + Minutes */}
           <div className="flex items-center gap-6">
             <div className="flex-1">
               <label className={`text-xs font-medium mb-1 flex items-center gap-2 ${tensionColor(meta.tensionLevel ?? 5)}`}>
@@ -201,8 +150,7 @@ export function SceneMetaPane({ scene, onChange, readOnly }: {
                 <span className="text-gray-600 font-normal">({tensionLabel(meta.tensionLevel ?? 5)})</span>
               </label>
               <input
-                type="range"
-                min={1} max={10}
+                type="range" min={1} max={10}
                 value={meta.tensionLevel ?? 5}
                 onChange={(e) => !readOnly && onChange({ meta: { ...meta, tensionLevel: Number(e.target.value) } })}
                 disabled={readOnly}
@@ -213,8 +161,7 @@ export function SceneMetaPane({ scene, onChange, readOnly }: {
               <label className="text-xs text-gray-500 block mb-1">예상 분량</label>
               <div className="flex items-center gap-1">
                 <input
-                  type="number"
-                  min={0.5} max={30} step={0.5}
+                  type="number" min={0.5} max={30} step={0.5}
                   value={meta.estimatedMinutes ?? 1}
                   onChange={(e) => !readOnly && onChange({ meta: { ...meta, estimatedMinutes: Number(e.target.value) } })}
                   readOnly={readOnly}
@@ -225,7 +172,6 @@ export function SceneMetaPane({ scene, onChange, readOnly }: {
             </div>
           </div>
 
-          {/* Emotional tones */}
           <div>
             <label className="text-xs text-gray-500 block mb-1">감정 톤</label>
             <div className="flex flex-wrap gap-1.5">
@@ -249,7 +195,6 @@ export function SceneMetaPane({ scene, onChange, readOnly }: {
             </div>
           </div>
 
-          {/* Tags */}
           <div>
             <label className="text-xs text-gray-500 block mb-1">태그</label>
             <TagInput

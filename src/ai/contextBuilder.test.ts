@@ -114,10 +114,10 @@ describe('buildContextMarkdown', () => {
       ...baseCtx,
       foreshadowing: [{
         id: 'fs1',
-        type: 'object',
-        importance: 'high',
+        type: 'foreshadowing',
+        importance: 'major',
         status: 'planted',
-        plantedIn: { sceneId: 's001', description: '빨간 열쇠' },
+        plantedIn: { scene: 's001', blockIndex: 0, description: '빨간 열쇠' },
         payoff: null,
       }],
     });
@@ -131,11 +131,11 @@ describe('buildContextMarkdown', () => {
       ...baseCtx,
       foreshadowing: [{
         id: 'fs2',
-        type: 'dialogue',
-        importance: 'medium',
+        type: 'foreshadowing',
+        importance: 'minor',
         status: 'resolved',
-        plantedIn: { sceneId: 's001', description: '신비한 편지' },
-        payoff: { sceneId: 's010', description: '편지 회수', strength: 'strong' },
+        plantedIn: { scene: 's001', blockIndex: 0, description: '신비한 편지' },
+        payoff: { scene: 's010', blockIndex: 0, description: '편지 회수', strength: 'strong' },
       }],
     });
     expect(md).toContain('✅ 회수됨');

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import type { Scene, SceneBlock, SceneIndexEntry, CharacterBlock, ActionBlock } from '../types/scene';
 import { useSceneStore } from '../store/sceneStore';
 import { useCharacterStore } from '../store/characterStore';
@@ -12,6 +12,7 @@ import { SceneHeader } from './SceneHeader';
 import { SceneMetaPane } from './SceneMetaPane';
 import { renderBlock, getNextBlockType, createEmptyBlock, isBlockEmpty } from './blocks/renderBlock';
 import type { BlockProps } from './blocks/BlockProps';
+import { buildContextMarkdown } from '../ai/contextBuilder';
 
 type EditorMode = 'normal' | 'focus' | 'reading' | 'typewriter';
 
@@ -23,11 +24,32 @@ function getBlockEditableEl(container: HTMLDivElement, blockIndex: number): HTML
 }
 
 export function ScreenplayEditor({ mode = 'normal', readOnly = false }: { mode?: EditorMode; readOnly?: boolean }) {
-  const { currentScene, updateCurrentScene } = useSceneStore();
-  const { index: charIndex } = useCharacterStore();
-  const { dirHandle, autoSave, settings } = useProjectStore();
+  const { currentScene, updateCurrentScene, index: sceneIndex, currentSceneId } = useSceneStore();
+  const { index: charIndex, characters: loadedCharacters } = useCharacterStore();
+  const { dirHandle, autoSave, settings, meta: projectMeta } = useProjectStore();
   const [selectedBlockIndex, setSelectedBlockIndex] = useState<number | null>(null);
   const [saveIndicator, setSaveIndicator] = useState<'saved' | 'saving' | 'unsaved'>('saved');
+
+  // Build AI context markdown (memoized; rebuilt when scene or characters change)
+  const contextMarkdown = useMemo(() => {
+    if (!currentScene || !settings.ai.apiKey) return undefined;
+    const curIdx = sceneIndex.findIndex(s => s.id === currentSceneId);
+    const prevEntry = curIdx > 0 ? sceneIndex[curIdx - 1] : undefined;
+    const nextEntry = curIdx >= 0 && curIdx < sceneIndex.length - 1 ? sceneIndex[curIdx + 1] : undefined;
+    const characters = Object.values(loadedCharacters);
+    return buildContextMarkdown({
+      project: {
+        title: projectMeta?.title ?? '제목 없음',
+        logline: projectMeta?.logline ?? '',
+        genre: projectMeta?.genre ?? [],
+      },
+      currentScene,
+      prevScene: prevEntry ? { meta: { summary: prevEntry.summary ?? '', emotionalTone: [], tensionLevel: 5, estimatedMinutes: 1, tags: [] } } : undefined,
+      nextScene: nextEntry ? { meta: { summary: nextEntry.summary ?? '', emotionalTone: [], tensionLevel: 5, estimatedMinutes: 1, tags: [] } } : undefined,
+      characters,
+      totalTokens: 0,
+    });
+  }, [currentScene, currentSceneId, sceneIndex, loadedCharacters, projectMeta, settings.ai.apiKey]);
   const saveTimerRef = useRef<number | null>(null);
   const rafRef = useRef<number | null>(null);
   const blocksContainerRef = useRef<HTMLDivElement>(null);
@@ -489,6 +511,7 @@ export function ScreenplayEditor({ mode = 'normal', readOnly = false }: { mode?:
           sceneId={currentScene.id}
           blockIndex={aiSelection.blockIndex}
           originalBlock={aiSelection.block}
+          contextMarkdown={contextMarkdown}
           onApply={(newText) => {
             const block = currentScene.blocks[aiSelection.blockIndex];
             if ('text' in block) handleBlockChange(aiSelection.blockIndex, { ...block, text: newText } as SceneBlock);

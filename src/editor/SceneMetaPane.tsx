@@ -2,6 +2,8 @@ import { useState } from 'react';
 import type { Scene } from '../types/scene';
 import { STATUS_LABELS, STATUS_BG_BUTTON, STATUS_BG_ACTIVE } from '../utils/statusMapping';
 import type { SceneStatus } from '../types/scene';
+import { useProjectStore } from '../store/projectStore';
+import { callAI } from '../ai/aiClient';
 
 const TONE_OPTIONS = [
   '희망적', '긴장', '슬픔', '분노', '두려움', '기쁨',
@@ -78,7 +80,36 @@ export function SceneMetaPane({ scene, onChange, readOnly }: {
   readOnly: boolean;
 }) {
   const [expanded, setExpanded] = useState(false);
+  const [summaryLoading, setSummaryLoading] = useState(false);
+  const { settings } = useProjectStore();
   const { meta } = scene;
+
+  const handleAISummary = async () => {
+    setSummaryLoading(true);
+    try {
+      const sceneText = scene.blocks
+        .map((b) => {
+          if ('text' in b) return b.text;
+          if (b.type === 'character') return b.characterId;
+          if (b.type === 'transition') return b.transitionType;
+          return '';
+        })
+        .filter(Boolean)
+        .join('\n');
+
+      const [summary] = await callAI(
+        settings.ai,
+        '당신은 한국 영화 시나리오 전문 편집자입니다. 씬 내용을 읽고 핵심을 2~3줄로 요약하세요. 요약문만 반환하세요.',
+        `씬 헤더: ${scene.header.interior}. ${scene.header.location} - ${scene.header.timeOfDay}\n\n${sceneText}`,
+        1,
+      );
+      onChange({ meta: { ...meta, summary } });
+    } catch (err) {
+      console.error('AI 요약 생성 실패:', err);
+    } finally {
+      setSummaryLoading(false);
+    }
+  };
 
   const toggleTone = (tone: string) => {
     if (readOnly) return;
@@ -138,7 +169,19 @@ export function SceneMetaPane({ scene, onChange, readOnly }: {
 
           {/* Summary */}
           <div>
-            <label className="text-xs text-gray-500 block mb-1">씬 요약 / 메모</label>
+            <div className="flex items-center justify-between mb-1">
+              <label className="text-xs text-gray-500">씬 요약 / 메모</label>
+              {!readOnly && settings.ai.apiKey && (
+                <button
+                  onClick={handleAISummary}
+                  disabled={summaryLoading}
+                  title="AI로 씬 요약 자동 생성"
+                  className="text-xs px-2 py-0.5 rounded bg-gray-800 text-gray-500 hover:text-red-400 hover:bg-gray-700 transition-colors disabled:opacity-40"
+                >
+                  {summaryLoading ? '생성 중...' : '✦ AI 요약'}
+                </button>
+              )}
+            </div>
             <textarea
               value={meta.summary ?? ''}
               onChange={(e) => !readOnly && onChange({ meta: { ...meta, summary: e.target.value } })}

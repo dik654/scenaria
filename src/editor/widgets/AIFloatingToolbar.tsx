@@ -4,6 +4,7 @@ import { useAIHistoryStore } from '../../store/aiHistoryStore';
 import { nanoid } from 'nanoid';
 import type { SceneBlock } from '../../types/scene';
 import { InlineDiff } from './InlineDiff';
+import { callAI } from '../../ai/aiClient';
 
 interface AIFloatingToolbarProps {
   selectedText: string;
@@ -11,6 +12,8 @@ interface AIFloatingToolbarProps {
   sceneId: string;
   blockIndex: number;
   originalBlock: SceneBlock;
+  /** Full scene context markdown built by contextBuilder — enriches AI responses */
+  contextMarkdown?: string;
   onApply: (newText: string) => void;
   onClose: () => void;
 }
@@ -47,6 +50,7 @@ export function AIFloatingToolbar({
   sceneId,
   blockIndex,
   originalBlock,
+  contextMarkdown,
   onApply,
   onClose,
 }: AIFloatingToolbarProps) {
@@ -69,49 +73,18 @@ export function AIFloatingToolbar({
     }
   }, [mode]);
 
-  const callAI = async (prompt: string): Promise<string[]> => {
-    const { ai } = settings;
-    if (!ai.apiKey && ai.provider !== 'local-vllm') {
-      throw new Error('AI API 키가 설정되지 않았습니다. 설정에서 API 키를 입력해주세요.');
-    }
+  const invokeAI = async (prompt: string): Promise<string[]> => {
+    const systemPrompt = [
+      '당신은 한국 영화 시나리오 전문 편집자입니다.',
+      '요청한 수정 사항을 적용하고, 원본과 다른 3가지 버전을 제공합니다.',
+      '각 버전은 JSON 배열로 반환하세요: ["버전1", "버전2", "버전3"]',
+      '원본 텍스트의 언어와 형식을 유지하세요.',
+      ...(contextMarkdown ? ['\n## 씬 컨텍스트 (참고용)\n', contextMarkdown] : []),
+    ].join('\n');
 
-    const systemPrompt = `당신은 한국 영화 시나리오 전문 편집자입니다.
-요청한 수정 사항을 적용하고, 원본과 다른 3가지 버전을 제공합니다.
-각 버전은 JSON 배열로 반환하세요: ["버전1", "버전2", "버전3"]
-원본 텍스트의 언어와 형식을 유지하세요.`;
+    const userPrompt = `원본:\n${selectedText || originalText}\n\n지시:\n${prompt}\n\n3가지 버전을 JSON 배열로:`;
 
-    const response = await fetch(
-      ai.provider === 'claude'
-        ? 'https://api.anthropic.com/v1/messages'
-        : ai.endpoint ?? 'http://localhost:8000/v1/messages',
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(ai.provider === 'claude' ? { 'x-api-key': ai.apiKey!, 'anthropic-version': '2023-06-01' } : {}),
-          ...(ai.provider === 'openai' ? { Authorization: `Bearer ${ai.apiKey}` } : {}),
-        },
-        body: JSON.stringify({
-          model: ai.model ?? 'claude-sonnet-4-6',
-          max_tokens: 1024,
-          system: systemPrompt,
-          messages: [{ role: 'user', content: `원본:\n${selectedText || originalText}\n\n지시:\n${prompt}\n\n3가지 버전을 JSON 배열로:` }],
-        }),
-      }
-    );
-
-    if (!response.ok) throw new Error(`AI 호출 실패: ${response.status}`);
-    const data = await response.json();
-    const content = ai.provider === 'openai'
-      ? data.choices[0].message.content
-      : data.content[0].text;
-
-    const match = content.match(/\[[\s\S]*\]/);
-    if (match) {
-      const parsed = JSON.parse(match[0]) as string[];
-      return parsed.slice(0, 3);
-    }
-    return [content.trim()];
+    return callAI(settings.ai, systemPrompt, userPrompt, 3);
   };
 
   const handleGenerateAlternatives = async (promptOverride?: string) => {
@@ -128,7 +101,7 @@ export function AIFloatingToolbar({
       const prompt = promptOverride
         ?? `아래 텍스트의 대안 3가지를 작성하세요:\nA: 비슷하지만 더 세련되게\nB: 완전히 다른 접근\nC: 최소한의 변경`;
 
-      const results = await callAI(prompt);
+      const results = await invokeAI(prompt);
       const tones = ['세련되게', '다른 접근', '최소 변경'];
       const filled = alts.map((a, i) => ({
         ...a,
@@ -161,7 +134,7 @@ export function AIFloatingToolbar({
     setIsLoading(true);
     setError(null);
     try {
-      const results = await callAI(instruction);
+      const results = await invokeAI(instruction);
       setModifiedText(results[0]);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'AI 호출 실패');

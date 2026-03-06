@@ -9,106 +9,20 @@ import type {
   MergeResult,
 } from './types';
 import { buildDiffResult } from './diffEngine';
+import {
+  ensureDir,
+  readJSON,
+  writeJSON,
+  readText,
+  writeText,
+  captureSnapshot,
+  restoreSnapshot,
+} from './historyFS';
 
 const HISTORY_DIR = '.history';
 const SAVES_DIR = '.history/saves';
 const BRANCHES_DIR = '.history/branches';
 const MILESTONES_DIR = '.history/milestones';
-
-async function ensureDir(root: FileSystemDirectoryHandle, ...parts: string[]) {
-  let cur = root;
-  for (const part of parts) {
-    cur = await cur.getDirectoryHandle(part, { create: true });
-  }
-  return cur;
-}
-
-async function readJSON<T>(root: FileSystemDirectoryHandle, ...pathParts: string[]): Promise<T | null> {
-  try {
-    let cur = root;
-    for (let i = 0; i < pathParts.length - 1; i++) {
-      cur = await cur.getDirectoryHandle(pathParts[i]);
-    }
-    const fh = await cur.getFileHandle(pathParts[pathParts.length - 1]);
-    const file = await fh.getFile();
-    return JSON.parse(await file.text()) as T;
-  } catch {
-    return null;
-  }
-}
-
-async function writeJSON(root: FileSystemDirectoryHandle, data: unknown, ...pathParts: string[]) {
-  let cur = root;
-  for (let i = 0; i < pathParts.length - 1; i++) {
-    cur = await cur.getDirectoryHandle(pathParts[i], { create: true });
-  }
-  const fh = await cur.getFileHandle(pathParts[pathParts.length - 1], { create: true });
-  const writable = await fh.createWritable();
-  await writable.write(JSON.stringify(data, null, 2));
-  await writable.close();
-}
-
-async function readText(root: FileSystemDirectoryHandle, ...pathParts: string[]): Promise<string | null> {
-  try {
-    let cur = root;
-    for (let i = 0; i < pathParts.length - 1; i++) {
-      cur = await cur.getDirectoryHandle(pathParts[i]);
-    }
-    const fh = await cur.getFileHandle(pathParts[pathParts.length - 1]);
-    const file = await fh.getFile();
-    return file.text();
-  } catch {
-    return null;
-  }
-}
-
-/**
- * Reads all tracked project files and returns their JSON content as strings.
- * Excludes .history/ and storyboard/audio/video binaries.
- */
-async function captureSnapshot(dirHandle: FileSystemDirectoryHandle): Promise<Record<string, string>> {
-  const snapshot: Record<string, string> = {};
-  const EXCLUDED = new Set(['.history', 'storyboard', 'audio', 'video', '.scenaria-version']);
-
-  async function walk(dir: FileSystemDirectoryHandle, prefix: string) {
-    for await (const entry of dir.values()) {
-      if (EXCLUDED.has(entry.name)) continue;
-      const entryPath = prefix ? `${prefix}/${entry.name}` : entry.name;
-      if (entry.kind === 'directory') {
-        await walk(entry as FileSystemDirectoryHandle, entryPath);
-      } else if (entry.name.endsWith('.json')) {
-        try {
-          const fh = entry as FileSystemFileHandle;
-          const file = await fh.getFile();
-          snapshot[entryPath] = await file.text();
-        } catch {
-          // skip unreadable files
-        }
-      }
-    }
-  }
-
-  await walk(dirHandle, '');
-  return snapshot;
-}
-
-async function restoreSnapshot(
-  dirHandle: FileSystemDirectoryHandle,
-  snapshot: Record<string, string>
-) {
-  for (const [path, content] of Object.entries(snapshot)) {
-    const parts = path.split('/');
-    const filename = parts.pop()!;
-    let cur = dirHandle;
-    for (const part of parts) {
-      cur = await cur.getDirectoryHandle(part, { create: true });
-    }
-    const fh = await cur.getFileHandle(filename, { create: true });
-    const writable = await fh.createWritable();
-    await writable.write(content);
-    await writable.close();
-  }
-}
 
 export class HistoryManager {
   private dirHandle: FileSystemDirectoryHandle;
@@ -126,8 +40,7 @@ export class HistoryManager {
 
     const idx = await readJSON<SaveIndex>(this.dirHandle, HISTORY_DIR, 'index.json');
     if (!idx) {
-      const newIdx: SaveIndex = { nextId: 1, savePoints: [] };
-      await writeJSON(this.dirHandle, newIdx, HISTORY_DIR, 'index.json');
+      await writeJSON(this.dirHandle, { nextId: 1, savePoints: [] }, HISTORY_DIR, 'index.json');
     }
 
     const branchFile = await readText(this.dirHandle, BRANCHES_DIR, '_current');
@@ -138,10 +51,7 @@ export class HistoryManager {
         createdAt: new Date().toISOString(),
       };
       await writeJSON(this.dirHandle, branchInfo, BRANCHES_DIR, '원본.json');
-      const fh = await (await ensureDir(this.dirHandle, BRANCHES_DIR)).getFileHandle('_current', { create: true });
-      const writable = await fh.createWritable();
-      await writable.write('원본');
-      await writable.close();
+      await writeText(this.dirHandle, '원본', BRANCHES_DIR, '_current');
     } else {
       this.currentBranch = branchFile.trim();
     }
@@ -154,7 +64,6 @@ export class HistoryManager {
 
     const snapshot = await captureSnapshot(this.dirHandle);
 
-    // Compute changed files by comparing to parent
     const parentId = idx.savePoints.length > 0
       ? idx.savePoints[idx.savePoints.length - 1].id
       : null;
@@ -175,7 +84,6 @@ export class HistoryManager {
       .filter(f => f.startsWith('characters/') && !f.includes('_index'))
       .map(f => f.replace('characters/', '').replace('.json', ''));
 
-    // Count net dialogue block changes across modified scene files
     let dialoguesChanged = 0;
     for (const f of changedFiles.filter(f => f.startsWith('screenplay/') && f.endsWith('.json'))) {
       try {
@@ -205,13 +113,11 @@ export class HistoryManager {
     await metaWritable.write(JSON.stringify(savePoint, null, 2));
     await metaWritable.close();
 
-    // Store snapshot
     const filesFh = await saveDir.getFileHandle('files.json', { create: true });
     const filesWritable = await filesFh.createWritable();
     await filesWritable.write(JSON.stringify(snapshot, null, 2));
     await filesWritable.close();
 
-    // Update index
     idx.nextId = idNum + 1;
     idx.savePoints.push({ id, timestamp: savePoint.timestamp, memo: savePoint.memo, auto });
     await writeJSON(this.dirHandle, idx, HISTORY_DIR, 'index.json');
@@ -226,59 +132,40 @@ export class HistoryManager {
     const all: SavePoint[] = [];
     for (const entry of idx.savePoints) {
       const sp = await readJSON<SavePoint>(this.dirHandle, SAVES_DIR, entry.id, 'meta.json');
-      if (sp && (!branch || sp.branch === branch)) {
-        all.push(sp);
-      }
+      if (sp && (!branch || sp.branch === branch)) all.push(sp);
     }
-    return all.reverse(); // newest first
+    return all.reverse();
   }
 
   async restore(saveId: string): Promise<void> {
-    // First create a safety save point
     await this.createSavePoint('되돌리기 전 자동 저장', true);
-
-    const snapshot = await readJSON<Record<string, string>>(
-      this.dirHandle, SAVES_DIR, saveId, 'files.json'
-    );
+    const snapshot = await readJSON<Record<string, string>>(this.dirHandle, SAVES_DIR, saveId, 'files.json');
     if (!snapshot) throw new Error(`저장 지점 ${saveId}를 찾을 수 없습니다`);
-
     await restoreSnapshot(this.dirHandle, snapshot);
   }
 
   async diff(saveIdA: string, saveIdB: string): Promise<DiffResult> {
-    const snapA = (await readJSON<Record<string, string>>(
-      this.dirHandle, SAVES_DIR, saveIdA, 'files.json'
-    )) ?? {};
-    const snapB = (await readJSON<Record<string, string>>(
-      this.dirHandle, SAVES_DIR, saveIdB, 'files.json'
-    )) ?? {};
+    const snapA = (await readJSON<Record<string, string>>(this.dirHandle, SAVES_DIR, saveIdA, 'files.json')) ?? {};
+    const snapB = (await readJSON<Record<string, string>>(this.dirHandle, SAVES_DIR, saveIdB, 'files.json')) ?? {};
     return buildDiffResult(saveIdA, saveIdB, snapA, snapB);
   }
 
   async sceneHistory(sceneId: string): Promise<SceneChange[]> {
     const all = await this.listSavePoints();
-    const result: SceneChange[] = [];
-    for (const sp of all) {
-      const changed = sp.changedFiles.find(f => f.includes(sceneId));
-      if (changed) {
-        result.push({
-          saveId: sp.id,
-          timestamp: sp.timestamp,
-          memo: sp.memo,
-          changedFields: [changed],
-        });
-      }
-    }
-    return result;
+    return all
+      .map(sp => {
+        const changed = sp.changedFiles.find(f => f.includes(sceneId));
+        return changed ? { saveId: sp.id, timestamp: sp.timestamp, memo: sp.memo, changedFields: [changed] } : null;
+      })
+      .filter(Boolean) as SceneChange[];
   }
 
   async createMilestone(name: string): Promise<void> {
     const all = await this.listSavePoints();
     if (all.length === 0) throw new Error('저장 지점이 없습니다');
-    const latest = all[0];
     const milestone: Milestone = {
       name,
-      saveId: latest.id,
+      saveId: all[0].id,
       createdAt: new Date().toISOString(),
     };
     const safeName = name.replace(/[/\\:*?"<>|]/g, '_');
@@ -292,8 +179,7 @@ export class HistoryManager {
       if (entry.kind === 'file' && entry.name.endsWith('.json')) {
         const fh = entry as FileSystemFileHandle;
         const file = await fh.getFile();
-        const m = JSON.parse(await file.text()) as Milestone;
-        milestones.push(m);
+        milestones.push(JSON.parse(await file.text()) as Milestone);
       }
     }
     return milestones.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
@@ -301,10 +187,9 @@ export class HistoryManager {
 
   async createBranch(name: string): Promise<void> {
     const allSaves = await this.listSavePoints(this.currentBranch);
-    const currentSaveId = allSaves[0]?.id ?? '0000';
     const branchInfo: BranchInfo = {
       name,
-      currentSaveId,
+      currentSaveId: allSaves[0]?.id ?? '0000',
       createdAt: new Date().toISOString(),
     };
     const safeName = name.replace(/[/\\:*?"<>|]/g, '_');
@@ -313,37 +198,25 @@ export class HistoryManager {
 
   async switchBranch(name: string): Promise<void> {
     this.currentBranch = name;
-    const fh = await (await ensureDir(this.dirHandle, BRANCHES_DIR))
-      .getFileHandle('_current', { create: true });
-    const writable = await fh.createWritable();
-    await writable.write(name);
-    await writable.close();
+    await writeText(this.dirHandle, name, BRANCHES_DIR, '_current');
   }
 
   async mergeBranch(_sourceBranch: string): Promise<MergeResult> {
-    // MVP stub — full merge logic in Phase 1.3c
     return { success: true, conflicts: [] };
   }
 
   async stash(): Promise<void> {
-    const stashDir = await ensureDir(this.dirHandle, HISTORY_DIR, 'stash');
     const snapshot = await captureSnapshot(this.dirHandle);
-    const fh = await stashDir.getFileHandle('stash.json', { create: true });
-    const writable = await fh.createWritable();
-    await writable.write(JSON.stringify(snapshot, null, 2));
-    await writable.close();
+    await writeJSON(this.dirHandle, snapshot, HISTORY_DIR, 'stash', 'stash.json');
   }
 
   async unstash(): Promise<void> {
-    const snapshot = await readJSON<Record<string, string>>(
-      this.dirHandle, HISTORY_DIR, 'stash', 'stash.json'
-    );
+    const snapshot = await readJSON<Record<string, string>>(this.dirHandle, HISTORY_DIR, 'stash', 'stash.json');
     if (!snapshot) throw new Error('임시 보관된 내용이 없습니다');
     await restoreSnapshot(this.dirHandle, snapshot);
   }
 
   async cleanup(): Promise<void> {
-    // Keep last 100 auto-saves; remove older ones
     const idx = await readJSON<SaveIndex>(this.dirHandle, HISTORY_DIR, 'index.json');
     if (!idx) return;
 

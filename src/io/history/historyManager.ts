@@ -185,6 +185,22 @@ export class HistoryManager {
     return milestones.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   }
 
+  async listBranches(): Promise<{ branches: BranchInfo[]; current: string }> {
+    const branchDir = await ensureDir(this.dirHandle, BRANCHES_DIR);
+    const branches: BranchInfo[] = [];
+    for await (const entry of branchDir.values()) {
+      if (entry.kind === 'file' && entry.name.endsWith('.json')) {
+        const fh = entry as FileSystemFileHandle;
+        const file = await fh.getFile();
+        branches.push(JSON.parse(await file.text()) as BranchInfo);
+      }
+    }
+    return {
+      branches: branches.sort((a, b) => a.createdAt.localeCompare(b.createdAt)),
+      current: this.currentBranch,
+    };
+  }
+
   async createBranch(name: string): Promise<void> {
     const allSaves = await this.listSavePoints(this.currentBranch);
     const branchInfo: BranchInfo = {
@@ -253,6 +269,13 @@ export class HistoryManager {
     await restoreSnapshot(this.dirHandle, merged);
     await this.createSavePoint(`브랜치 병합: ${sourceBranch} → ${this.currentBranch}`, false);
     return { success: true, conflicts: [] };
+  }
+
+  async applyConflictResolution(resolved: Record<string, string>): Promise<void> {
+    const currentSnap = await captureSnapshot(this.dirHandle);
+    const merged = { ...currentSnap, ...resolved };
+    await restoreSnapshot(this.dirHandle, merged);
+    await this.createSavePoint('충돌 수동 해결 후 병합', false);
   }
 
   async stash(): Promise<void> {

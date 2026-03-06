@@ -6,9 +6,10 @@ import { fileIO } from '../../io';
 import type { Scene } from '../../types/scene';
 import type { Character } from '../../types/character';
 import { renderFullScreenplayTXT, buildLLMContextText, sceneToFountain } from '../../utils/formatRenderer';
+import { renderScreenplayDOCX } from '../../utils/docxRenderer';
 import { useToast } from '../../components/Toast';
 
-export type ExportFormat = 'txt' | 'fountain' | 'llm-context';
+export type ExportFormat = 'txt' | 'fountain' | 'llm-context' | 'docx';
 
 async function loadCharMap(
   charIndex: { id: string; filename: string }[],
@@ -55,25 +56,31 @@ export function useExportOps() {
       }
 
       const charMap = await loadCharMap(charIndex, characters, dirHandle);
-      let content = '';
+      let blob: Blob;
       let filename = '';
 
-      switch (format) {
-        case 'txt':
-          content = renderFullScreenplayTXT(scenes, meta.title, charMap);
-          filename = `${meta.title}.txt`;
-          break;
-        case 'fountain':
-          content = scenes.map(({ scene }) => sceneToFountain(scene, charMap)).join('\n\n');
-          filename = `${meta.title}.fountain`;
-          break;
-        case 'llm-context':
-          content = buildLLMContextText(scenes.map(s => s.scene), Object.values(charMap), meta.title, meta.logline);
-          filename = `${meta.title}-context.md`;
-          break;
+      if (format === 'docx') {
+        blob = await renderScreenplayDOCX(scenes, meta.title, charMap);
+        filename = `${meta.title}.docx`;
+      } else {
+        let content = '';
+        switch (format) {
+          case 'txt':
+            content = renderFullScreenplayTXT(scenes, meta.title, charMap);
+            filename = `${meta.title}.txt`;
+            break;
+          case 'fountain':
+            content = scenes.map(({ scene }) => sceneToFountain(scene, charMap)).join('\n\n');
+            filename = `${meta.title}.fountain`;
+            break;
+          case 'llm-context':
+            content = buildLLMContextText(scenes.map(s => s.scene), Object.values(charMap), meta.title, meta.logline);
+            filename = `${meta.title}-context.md`;
+            break;
+        }
+        blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
       }
 
-      const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;

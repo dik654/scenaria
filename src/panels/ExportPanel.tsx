@@ -78,6 +78,7 @@ export function ExportPanel() {
                 {([
                   ['txt', '한국 시나리오 TXT', '표준 한국 시나리오 텍스트 형식'],
                   ['fountain', 'Fountain', '국제 호환 시나리오 포맷'],
+                  ['docx', 'Word 문서 (DOCX)', 'Microsoft Word 호환 시나리오'],
                   ['llm-context', 'LLM 컨텍스트', 'AI에게 붙여넣기용 마크다운'],
                 ] as [ExportFormat, string, string][]).map(([f, label, desc]) => (
                   <label key={f} className="flex items-start gap-2 cursor-pointer group">

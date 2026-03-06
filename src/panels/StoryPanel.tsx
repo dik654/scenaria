@@ -8,23 +8,29 @@ import { ForeshadowingManager } from '../visualizations/ForeshadowingManager';
 import { SceneDashboard } from '../visualizations/SceneDashboard';
 import { BeatBoard } from '../visualizations/BeatBoard';
 import { PlotThreadTimeline } from '../visualizations/PlotThreadTimeline';
+import { CausalGraph } from '../visualizations/CausalGraph';
+import { DualTimeline } from '../visualizations/DualTimeline';
+import { CharacterCoOccurrence } from '../visualizations/CharacterCoOccurrence';
 import { useSceneStore } from '../store/sceneStore';
 import { fileIO } from '../io';
 import { useProjectStore } from '../store/projectStore';
 import type { Scene } from '../types/scene';
 
-type PlotView = 'dashboard' | 'tension' | 'clock' | 'cards' | 'presence' | 'network' | 'foreshadowing' | 'beats' | 'threads';
+type PlotView = 'dashboard' | 'tension' | 'clock' | 'cards' | 'presence' | 'network' | 'foreshadowing' | 'beats' | 'threads' | 'causal' | 'dual-timeline' | 'co-occurrence';
 
 const VIEW_CONFIG: { id: PlotView; label: string; icon: string }[] = [
-  { id: 'dashboard',     label: '대시보드',     icon: '📊' },
-  { id: 'tension',       label: '긴장도',       icon: '📈' },
-  { id: 'clock',         label: '스토리클록',   icon: '🕐' },
-  { id: 'beats',         label: '비트 보드',    icon: '🎯' },
-  { id: 'threads',       label: '플롯 스레드',  icon: '🧵' },
-  { id: 'cards',         label: '씬 카드',      icon: '🃏' },
-  { id: 'presence',      label: '캐릭터 등장',  icon: '👥' },
-  { id: 'network',       label: '관계 네트워크', icon: '🕸️' },
-  { id: 'foreshadowing', label: '복선',         icon: '🔗' },
+  { id: 'dashboard',      label: '대시보드',       icon: '📊' },
+  { id: 'tension',        label: '긴장도',         icon: '📈' },
+  { id: 'clock',          label: '스토리클록',     icon: '🕐' },
+  { id: 'beats',          label: '비트 보드',      icon: '🎯' },
+  { id: 'threads',        label: '플롯 스레드',    icon: '🧵' },
+  { id: 'causal',         label: '인과 그래프',    icon: '⚡' },
+  { id: 'dual-timeline',  label: '이중 타임라인',  icon: '⏳' },
+  { id: 'cards',          label: '씬 카드',        icon: '🃏' },
+  { id: 'presence',       label: '캐릭터 등장',    icon: '👥' },
+  { id: 'network',        label: '관계 네트워크',  icon: '🕸️' },
+  { id: 'co-occurrence',  label: '코드 다이어그램', icon: '🎶' },
+  { id: 'foreshadowing',  label: '복선',           icon: '🔗' },
 ];
 
 export function StoryPanel() {
@@ -66,15 +72,18 @@ export function StoryPanel() {
 
       {/* Content */}
       <div className="flex-1 overflow-hidden">
-        {activeView === 'dashboard'     && <SceneDashboard />}
-        {activeView === 'tension'       && <TensionFlow onSceneClick={handleSceneSelect} />}
-        {activeView === 'clock'         && <StoryClock />}
-        {activeView === 'beats'         && <BeatBoard onSceneSelect={handleSceneSelect} />}
-        {activeView === 'threads'       && <PlotThreadTimeline onSceneSelect={handleSceneSelect} />}
-        {activeView === 'cards'         && <SceneCardBoard onSceneSelect={handleSceneSelect} />}
-        {activeView === 'presence'      && <CharacterPresence />}
-        {activeView === 'network'       && <CharacterNetwork onCharacterClick={() => {}} />}
-        {activeView === 'foreshadowing' && <ForeshadowingManager />}
+        {activeView === 'dashboard'      && <SceneDashboard />}
+        {activeView === 'tension'        && <TensionFlow onSceneClick={handleSceneSelect} />}
+        {activeView === 'clock'          && <StoryClock />}
+        {activeView === 'beats'          && <BeatBoard onSceneSelect={handleSceneSelect} />}
+        {activeView === 'threads'        && <PlotThreadTimeline onSceneSelect={handleSceneSelect} />}
+        {activeView === 'causal'         && <CausalGraph onSceneClick={handleSceneSelect} />}
+        {activeView === 'dual-timeline'  && <DualTimeline onSceneClick={handleSceneSelect} />}
+        {activeView === 'cards'          && <SceneCardBoard onSceneSelect={handleSceneSelect} />}
+        {activeView === 'presence'       && <CharacterPresence />}
+        {activeView === 'network'        && <CharacterNetwork onCharacterClick={() => {}} />}
+        {activeView === 'co-occurrence'  && <CharacterCoOccurrence />}
+        {activeView === 'foreshadowing'  && <ForeshadowingManager />}
       </div>
     </div>
   );

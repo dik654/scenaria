@@ -6,10 +6,12 @@ import type { Scene, SceneIndexEntry } from '../../types/scene';
 import { parseFountainToScenes } from '../../utils/documentParser';
 import { nextSceneId, renumberScenes } from '../../utils/sceneNumbering';
 import { sceneFilename } from '../../utils/fileNaming';
+import { useToast } from '../../components/Toast';
 
 export function useImportOps(onDone: () => void) {
   const { index: sceneIndex, addSceneToIndex, setIndex, setCurrentScene } = useSceneStore();
   const { dirHandle, meta } = useProjectStore();
+  const toast = useToast();
   const [importPreview, setImportPreview] = useState<{ count: number; titles: string[] } | null>(null);
   const [importData, setImportData] = useState<Partial<Scene>[] | null>(null);
   const [isImporting, setIsImporting] = useState(false);
@@ -77,7 +79,7 @@ export function useImportOps(onDone: () => void) {
       setImportPreview(null);
       resetFileInput();
       onDone();
-      alert(`${newEntries.length}개 씬을 가져왔습니다.`);
+      toast(`${newEntries.length}개 씬을 가져왔습니다.`, 'success');
     } catch (err) {
       setError('가져오기 실패: ' + (err instanceof Error ? err.message : String(err)));
     } finally {

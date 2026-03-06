@@ -6,6 +6,7 @@ import { fileIO } from '../../io';
 import type { Scene } from '../../types/scene';
 import type { Character } from '../../types/character';
 import { renderFullScreenplayTXT, buildLLMContextText, sceneToFountain } from '../../utils/formatRenderer';
+import { useToast } from '../../components/Toast';
 
 export type ExportFormat = 'txt' | 'fountain' | 'llm-context';
 
@@ -31,6 +32,7 @@ export function useExportOps() {
   const { index: sceneIndex, currentScene } = useSceneStore();
   const { meta, dirHandle } = useProjectStore();
   const { index: charIndex, characters } = useCharacterStore();
+  const toast = useToast();
   const [isExporting, setIsExporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -103,7 +105,7 @@ export function useExportOps() {
       }
       const text = buildLLMContextText(scenesToUse, Object.values(charMap), meta.title, meta.logline);
       await navigator.clipboard.writeText(text);
-      alert('클립보드에 복사됐습니다!');
+      toast('클립보드에 복사됐습니다!', 'success');
     } catch (err) {
       setError(err instanceof Error ? err.message : '복사 실패');
     } finally {

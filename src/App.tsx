@@ -11,6 +11,8 @@ import { RightSidebar, RightToolbar, type SidePanel } from './components/RightSi
 import { SceneNavigator } from './panels/SceneNavigator';
 import { ScreenplayEditor } from './editor/ScreenplayEditor';
 import { FindReplace } from './editor/widgets/FindReplace';
+import { ToastProvider } from './components/Toast';
+import { ConfirmDialogProvider } from './components/ConfirmDialog';
 
 type EditorMode = 'normal' | 'focus' | 'reading' | 'typewriter';
 
@@ -153,6 +155,18 @@ export function App() {
   const { meta } = useProjectStore();
   const [isOpen, setIsOpen] = useState(false);
 
-  if (!meta || !isOpen) return <StartScreen onOpen={() => setIsOpen(true)} />;
-  return <EditorLayout />;
+  if (!meta || !isOpen) return (
+    <ToastProvider>
+      <ConfirmDialogProvider>
+        <StartScreen onOpen={() => setIsOpen(true)} />
+      </ConfirmDialogProvider>
+    </ToastProvider>
+  );
+  return (
+    <ToastProvider>
+      <ConfirmDialogProvider>
+        <EditorLayout />
+      </ConfirmDialogProvider>
+    </ToastProvider>
+  );
 }

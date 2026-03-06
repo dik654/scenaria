@@ -6,11 +6,13 @@ import { fileIO } from '../io';
 import type { Character, CharacterIndexEntry } from '../types/character';
 import { STATUS_BG_ACTIVE } from '../utils/statusMapping';
 import { CharacterForm } from './characterPanel/CharacterForm';
+import { useConfirm } from '../components/ConfirmDialog';
 
 export function CharacterPanel() {
   const { index, characters, setCharacter, addToIndex, updateCharacter, removeCharacter } = useCharacterStore();
   const { dirHandle } = useProjectStore();
   const { index: sceneIndex } = useSceneStore();
+  const confirm = useConfirm();
   const [editTarget, setEditTarget] = useState<Partial<Character> | null>(null);
   const [isAdding, setIsAdding] = useState(false);
   const [filter, setFilter] = useState('');
@@ -43,7 +45,7 @@ export function CharacterPanel() {
   }, [dirHandle, index, addToIndex, updateCharacter, setCharacter]);
 
   const handleDelete = async (entry: CharacterIndexEntry) => {
-    if (!dirHandle || !confirm(`"${entry.name}"을 삭제하시겠습니까?`)) return;
+    if (!dirHandle || !await confirm(`"${entry.name}"을 삭제하시겠습니까?`)) return;
     try {
       await fileIO.deleteFile(dirHandle, `characters/${entry.filename}`);
       const newIndex = index.filter(c => c.id !== entry.id);

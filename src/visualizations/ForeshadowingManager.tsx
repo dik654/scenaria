@@ -3,6 +3,7 @@ import { useProjectStore } from '../store/projectStore';
 import { fileIO } from '../io';
 import type { ForeshadowingIndex, ForeshadowingItem } from '../types/story';
 import { nanoid } from 'nanoid';
+import { useConfirm } from '../components/ConfirmDialog';
 
 const STATUS_ICON: Record<string, string> = {
   planted: '🔗',
@@ -30,6 +31,7 @@ const STRENGTH_BADGE: Record<string, string> = {
 
 export function ForeshadowingManager() {
   const { dirHandle } = useProjectStore();
+  const confirm = useConfirm();
   const [data, setData] = useState<ForeshadowingIndex | null>(null);
   const [filter, setFilter] = useState<'all' | 'planted' | 'resolved'>('all');
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -78,7 +80,7 @@ export function ForeshadowingManager() {
   };
 
   const handleDelete = async (id: string) => {
-    if (!data || !confirm('이 복선을 삭제하시겠습니까?')) return;
+    if (!data || !await confirm('이 복선을 삭제하시겠습니까?')) return;
     await save({ items: data.items.filter(i => i.id !== id) });
   };
 

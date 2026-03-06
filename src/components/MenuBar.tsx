@@ -1,12 +1,16 @@
 import { useEffect, useRef, useState } from 'react';
 import { useProjectStore } from '../store/projectStore';
 import { useSceneStore } from '../store/sceneStore';
+import { usePrompt } from './PromptDialog';
+import { NewProjectDialog } from './NewProjectDialog';
+import { openProjectWithPicker } from '../io/openProject';
+import { useToast } from './Toast';
 
 type EditorMode = 'normal' | 'focus' | 'reading' | 'typewriter';
 type SidePanel = 'none' | 'history' | 'characters' | 'story' | 'consistency' | 'export' | 'settings';
 
 type MenuSep = { separator: true };
-type MenuAction = { label: string; shortcut?: string; action: () => void; disabled?: boolean };
+type MenuAction = { label: string; shortcut?: string; action: () => void | Promise<void>; disabled?: boolean };
 export type MenuItem = MenuSep | MenuAction;
 
 function DropdownMenu({ label, items }: { label: string; items: MenuItem[] }) {
@@ -64,8 +68,11 @@ export function MenuBar({
   onFindOpen: (replace?: boolean) => void;
   onTogglePanel: (p: SidePanel) => void;
 }) {
-  const { meta, historyManager, clearProject } = useProjectStore();
+  const { meta, historyManager, clearProject, setProject, setHistoryManager, setAutoSave, setSettings, setError } = useProjectStore();
   const { currentSceneId, index } = useSceneStore();
+  const prompt = usePrompt();
+  const toast = useToast();
+  const [showNewProjectDialog, setShowNewProjectDialog] = useState(false);
   const currentEntry = index.find(s => s.id === currentSceneId);
 
   const title = [
@@ -78,13 +85,25 @@ export function MenuBar({
 
   const createSavePoint = async () => {
     if (!historyManager) return;
-    const memo = prompt('저장 지점 메모 (Enter 건너뛰기):') ?? undefined;
-    await historyManager.createSavePoint(memo, false);
+    const memo = await prompt({ message: '저장 지점 메모', placeholder: 'Enter 건너뛰기' });
+    if (memo === null) return;
+    await historyManager.createSavePoint(memo || undefined, false);
+  };
+
+  const handleOpenProject = async () => {
+    try {
+      await openProjectWithPicker(setProject, setHistoryManager, setAutoSave, setSettings);
+    } catch (err) {
+      if (err instanceof Error && err.name !== 'AbortError') {
+        setError(err.message);
+        toast(err.message, 'error');
+      }
+    }
   };
 
   const fileItems: MenuItem[] = [
-    { label: '새 프로젝트', action: () => clearProject() },
-    { label: '프로젝트 열기', action: () => clearProject() },
+    { label: '새 프로젝트', action: () => setShowNewProjectDialog(true) },
+    { label: '프로젝트 열기', action: handleOpenProject },
     { separator: true },
     { label: '저장 지점 만들기', shortcut: 'Ctrl+⇧+Enter', action: createSavePoint, disabled: !historyManager },
     { separator: true },
@@ -95,7 +114,7 @@ export function MenuBar({
     { label: '찾기', shortcut: 'Ctrl+F', action: () => onFindOpen(false) },
     { label: '찾기 및 바꾸기', shortcut: 'Ctrl+H', action: () => onFindOpen(true) },
     { separator: true },
-    { label: '씬 번호로 이동', shortcut: 'Ctrl+G', action: () => { const n = prompt('씬 번호:'); if (!n) return; window.dispatchEvent(new CustomEvent('scenaria:gotoSceneByNumber', { detail: Number(n) })); } },
+    { label: '씬 번호로 이동', shortcut: 'Ctrl+G', action: async () => { const n = await prompt({ message: '씬 번호로 이동', placeholder: '번호 입력' }); if (!n) return; window.dispatchEvent(new CustomEvent('scenaria:gotoSceneByNumber', { detail: Number(n) })); } },
     { label: '새 씬 추가', shortcut: 'Ctrl+⇧+S', action: () => window.dispatchEvent(new CustomEvent('scenaria:addScene')) },
     { separator: true },
     { label: '씬 분할 (선택 블록)', shortcut: 'Ctrl+⇧+\\', action: () => window.dispatchEvent(new CustomEvent('scenaria:splitScene')) },
@@ -120,6 +139,13 @@ export function MenuBar({
   ];
 
   return (
+    <>
+    {showNewProjectDialog && (
+      <NewProjectDialog
+        onClose={() => setShowNewProjectDialog(false)}
+        onCreated={() => setShowNewProjectDialog(false)}
+      />
+    )}
     <div className="flex items-center h-9 bg-gray-950 border-b border-gray-800 px-3 gap-3 flex-shrink-0 select-none">
       <span className="text-red-500 font-bold text-sm">씬아리아</span>
       <div className="w-px h-4 bg-gray-800" />
@@ -169,5 +195,6 @@ export function MenuBar({
         ● 저장 지점
       </button>
     </div>
+    </>
   );
 }

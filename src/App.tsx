@@ -11,6 +11,9 @@ import { RightSidebar, RightToolbar, type SidePanel } from './components/RightSi
 import { SceneNavigator } from './panels/SceneNavigator';
 import { ScreenplayEditor } from './editor/ScreenplayEditor';
 import { FindReplace } from './editor/widgets/FindReplace';
+import { ToastProvider } from './components/Toast';
+import { ConfirmDialogProvider } from './components/ConfirmDialog';
+import { PromptDialogProvider, usePrompt } from './components/PromptDialog';
 
 type EditorMode = 'normal' | 'focus' | 'reading' | 'typewriter';
 
@@ -18,6 +21,7 @@ function EditorLayout() {
   const { dirHandle } = useProjectStore();
   const { setIndex, index } = useSceneStore();
   const { setIndex: setCharIndex } = useCharacterStore();
+  const prompt = usePrompt();
   const [rightPanel, setRightPanel] = useState<SidePanel>('none');
   const [editorMode, setEditorMode] = useState<EditorMode>('normal');
   const [showFind, setShowFind] = useState(false);
@@ -42,8 +46,8 @@ function EditorLayout() {
         e.preventDefault();
         const { historyManager } = useProjectStore.getState();
         if (historyManager) {
-          const memo = prompt('저장 지점 메모:') ?? undefined;
-          await historyManager.createSavePoint(memo, false);
+          const memo = await prompt({ message: '저장 지점 메모:', placeholder: '선택사항' }) ?? undefined;
+          await historyManager.createSavePoint(memo || undefined, false);
         }
         return;
       }
@@ -66,7 +70,7 @@ function EditorLayout() {
       }
       if (e.ctrlKey && e.key === 'g') {
         e.preventDefault();
-        const num = prompt('씬 번호로 이동:');
+        const num = await prompt({ message: '씬 번호로 이동:', placeholder: '번호 입력' });
         if (!num) return;
         const entry = useSceneStore.getState().index.find(s => s.number === Number(num));
         if (entry) window.dispatchEvent(new CustomEvent('scenaria:gotoScene', { detail: entry.id }));
@@ -153,6 +157,22 @@ export function App() {
   const { meta } = useProjectStore();
   const [isOpen, setIsOpen] = useState(false);
 
-  if (!meta || !isOpen) return <StartScreen onOpen={() => setIsOpen(true)} />;
-  return <EditorLayout />;
+  if (!meta || !isOpen) return (
+    <ToastProvider>
+      <ConfirmDialogProvider>
+        <PromptDialogProvider>
+          <StartScreen onOpen={() => setIsOpen(true)} />
+        </PromptDialogProvider>
+      </ConfirmDialogProvider>
+    </ToastProvider>
+  );
+  return (
+    <ToastProvider>
+      <ConfirmDialogProvider>
+        <PromptDialogProvider>
+          <EditorLayout />
+        </PromptDialogProvider>
+      </ConfirmDialogProvider>
+    </ToastProvider>
+  );
 }

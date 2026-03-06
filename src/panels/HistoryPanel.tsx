@@ -1,17 +1,33 @@
 import { useEffect, useState } from 'react';
 import { useProjectStore } from '../store/projectStore';
 import { useHistoryStore } from '../store/historyStore';
-import type { SavePoint, Milestone } from '../io/history/types';
+import type { SavePoint, Milestone, MergeResult } from '../io/history/types';
 import { DiffView } from './DiffView';
 import { RestoreDialog } from './RestoreDialog';
 import { MilestoneDialog } from './MilestoneDialog';
+import { BranchDialog } from './BranchDialog';
+import { ConflictResolver } from './ConflictResolver';
+import { usePrompt } from '../components/PromptDialog';
 
 export function HistoryPanel() {
   const { historyManager } = useProjectStore();
   const { savePoints, milestones, setSavePoints, setMilestones, setLoading, isLoading } = useHistoryStore();
+  const prompt = usePrompt();
   const [showDiff, setShowDiff] = useState<{ a: string; b: string } | null>(null);
   const [restoreTarget, setRestoreTarget] = useState<SavePoint | null>(null);
   const [showMilestoneDialog, setShowMilestoneDialog] = useState(false);
+  const [showBranchDialog, setShowBranchDialog] = useState(false);
+  const [conflicts, setConflicts] = useState<MergeResult['conflicts'] | null>(null);
+
+  // Listen for merge conflicts dispatched from BranchDialog
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const c = (e as CustomEvent<MergeResult['conflicts']>).detail;
+      if (c && c.length > 0) setConflicts(c);
+    };
+    window.addEventListener('scenaria:mergeConflict', handler);
+    return () => window.removeEventListener('scenaria:mergeConflict', handler);
+  }, []);
 
   useEffect(() => {
     if (!historyManager) return;
@@ -27,7 +43,8 @@ export function HistoryPanel() {
 
   const handleCreateManualSave = async () => {
     if (!historyManager) return;
-    const memo = prompt('저장 지점 메모 (선택사항):') ?? '';
+    const memo = await prompt({ message: '저장 지점 메모', placeholder: '선택사항' });
+    if (memo === null) return;
     const sp = await historyManager.createSavePoint(memo || undefined, false);
     setSavePoints([sp, ...savePoints]);
   };
@@ -75,11 +92,27 @@ export function HistoryPanel() {
           }}
         />
       )}
+      {showBranchDialog && (
+        <BranchDialog onClose={() => setShowBranchDialog(false)} />
+      )}
+      {conflicts && (
+        <ConflictResolver
+          conflicts={conflicts}
+          onClose={() => setConflicts(null)}
+        />
+      )}
 
       {/* Header */}
       <div className="flex items-center justify-between px-3 py-2 border-b border-gray-800">
         <span className="text-xs font-medium text-gray-400 uppercase tracking-wider">내역</span>
         <div className="flex gap-1">
+          <button
+            onClick={() => setShowBranchDialog(true)}
+            title="갈래 관리"
+            className="text-xs text-gray-500 hover:text-purple-400 px-1 transition-colors"
+          >
+            ⑂
+          </button>
           <button
             onClick={() => setShowMilestoneDialog(true)}
             title="이름 붙이기"

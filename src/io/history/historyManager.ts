@@ -185,6 +185,22 @@ export class HistoryManager {
     return milestones.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   }
 
+  async listBranches(): Promise<{ branches: BranchInfo[]; current: string }> {
+    const branchDir = await ensureDir(this.dirHandle, BRANCHES_DIR);
+    const branches: BranchInfo[] = [];
+    for await (const entry of branchDir.values()) {
+      if (entry.kind === 'file' && entry.name.endsWith('.json')) {
+        const fh = entry as FileSystemFileHandle;
+        const file = await fh.getFile();
+        branches.push(JSON.parse(await file.text()) as BranchInfo);
+      }
+    }
+    return {
+      branches: branches.sort((a, b) => a.createdAt.localeCompare(b.createdAt)),
+      current: this.currentBranch,
+    };
+  }
+
   async createBranch(name: string): Promise<void> {
     const allSaves = await this.listSavePoints(this.currentBranch);
     const branchInfo: BranchInfo = {
@@ -201,8 +217,65 @@ export class HistoryManager {
     await writeText(this.dirHandle, name, BRANCHES_DIR, '_current');
   }
 
-  async mergeBranch(_sourceBranch: string): Promise<MergeResult> {
+  async mergeBranch(sourceBranch: string): Promise<MergeResult> {
+    // Load latest snapshots from both branches
+    const targetSaves = await this.listSavePoints(this.currentBranch);
+    const sourceSaves = await this.listSavePoints(sourceBranch);
+
+    if (sourceSaves.length === 0) {
+      return { success: false, conflicts: [] };
+    }
+
+    const targetSnap: Record<string, string> = targetSaves.length > 0
+      ? (await readJSON<Record<string, string>>(this.dirHandle, SAVES_DIR, targetSaves[0].id, 'files.json')) ?? {}
+      : {};
+    const sourceSnap: Record<string, string> =
+      (await readJSON<Record<string, string>>(this.dirHandle, SAVES_DIR, sourceSaves[0].id, 'files.json')) ?? {};
+
+    // Find common ancestor: latest save point that exists on both branches (by parentId chain)
+    const targetIds = new Set(targetSaves.map(s => s.id));
+    const ancestor = sourceSaves.find(s => targetIds.has(s.id));
+    const ancestorSnap: Record<string, string> = ancestor
+      ? (await readJSON<Record<string, string>>(this.dirHandle, SAVES_DIR, ancestor.id, 'files.json')) ?? {}
+      : {};
+
+    // Three-way merge
+    const allKeys = new Set([...Object.keys(targetSnap), ...Object.keys(sourceSnap)]);
+    const merged: Record<string, string> = { ...targetSnap };
+    const conflicts: MergeResult['conflicts'] = [];
+
+    for (const key of allKeys) {
+      const base = ancestorSnap[key] ?? null;
+      const ours = targetSnap[key] ?? null;
+      const theirs = sourceSnap[key] ?? null;
+
+      if (ours === theirs) continue; // identical — no action needed
+      if (theirs === base) continue; // only target changed — keep ours
+      if (ours === base) {
+        // only source changed — take theirs
+        if (theirs === null) delete merged[key];
+        else merged[key] = theirs;
+      } else {
+        // both changed — conflict
+        conflicts.push({ path: key, ourContent: ours ?? '', theirContent: theirs ?? '' });
+      }
+    }
+
+    if (conflicts.length > 0) {
+      return { success: false, conflicts };
+    }
+
+    // Apply merged snapshot and create a save point
+    await restoreSnapshot(this.dirHandle, merged);
+    await this.createSavePoint(`브랜치 병합: ${sourceBranch} → ${this.currentBranch}`, false);
     return { success: true, conflicts: [] };
+  }
+
+  async applyConflictResolution(resolved: Record<string, string>): Promise<void> {
+    const currentSnap = await captureSnapshot(this.dirHandle);
+    const merged = { ...currentSnap, ...resolved };
+    await restoreSnapshot(this.dirHandle, merged);
+    await this.createSavePoint('충돌 수동 해결 후 병합', false);
   }
 
   async stash(): Promise<void> {

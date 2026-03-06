@@ -1,43 +1,13 @@
 import { useState, useEffect } from 'react';
 import { useProjectStore } from '../store/projectStore';
-import { fileIO } from '../io';
-import { loadProject } from '../io/projectInit';
-import { HistoryManager } from '../io/history/historyManager';
-import { AutoSave } from '../io/history/autoSave';
+import { openProjectFromHandle, openProjectWithPicker } from '../io/openProject';
 import {
   getRecentProjects,
   saveRecentProject,
   verifyHandlePermission,
   type RecentProject,
 } from '../io/recentProjects';
-import type { AppSettings } from '../types/project';
 import { NewProjectDialog } from './NewProjectDialog';
-
-async function openProjectFromHandle(
-  dirHandle: FileSystemDirectoryHandle,
-  setProject: (d: FileSystemDirectoryHandle, m: import('../types/project').ProjectMeta) => void,
-  setHistoryManager: (hm: HistoryManager) => void,
-  setAutoSave: (as: AutoSave) => void,
-  setSettings: (s: Partial<AppSettings>) => void,
-) {
-  const meta = await loadProject(fileIO, dirHandle);
-  setProject(dirHandle, meta);
-
-  const savedSettings = await fileIO.readJSON<AppSettings>(dirHandle, 'settings.json').catch(() => null);
-  if (savedSettings) setSettings(savedSettings);
-
-  const lsKey = localStorage.getItem('scenaria_api_key');
-  if (lsKey) setSettings({ ai: { ...(savedSettings?.ai ?? { provider: 'claude' }), apiKey: lsKey } });
-
-  const hm = new HistoryManager(dirHandle);
-  await hm.init();
-  setHistoryManager(hm);
-
-  const as = new AutoSave(hm);
-  setAutoSave(as);
-
-  return meta;
-}
 
 export function StartScreen({ onOpen }: { onOpen: () => void }) {
   const [showNewDialog, setShowNewDialog] = useState(false);
@@ -52,14 +22,7 @@ export function StartScreen({ onOpen }: { onOpen: () => void }) {
   const handleOpenProject = async () => {
     setLoading(true);
     try {
-      const handle = await fileIO.openProject();
-      const meta = await openProjectFromHandle(handle.dirHandle, setProject, setHistoryManager, setAutoSave, setSettings);
-      await saveRecentProject({
-        id: meta.id,
-        name: meta.title,
-        dirHandle: handle.dirHandle,
-        lastOpened: new Date().toISOString(),
-      });
+      await openProjectWithPicker(setProject, setHistoryManager, setAutoSave, setSettings);
       onOpen();
     } catch (err) {
       if (err instanceof Error && err.name !== 'AbortError') setError(err.message);

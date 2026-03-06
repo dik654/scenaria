@@ -6,6 +6,7 @@ import type { Scene, SceneIndexEntry } from '../../types/scene';
 import { nanoid } from 'nanoid';
 import { nextSceneId, renumberScenes } from '../../utils/sceneNumbering';
 import { sceneFilename } from '../../utils/fileNaming';
+import { useConfirm } from '../../components/ConfirmDialog';
 
 function createDefaultScene(id: string): Scene {
   return {
@@ -21,6 +22,7 @@ function createDefaultScene(id: string): Scene {
 export function useSceneOps() {
   const { index, currentSceneId, setCurrentScene, setIndex, addSceneToIndex, removeSceneFromIndex, reorderScenes } = useSceneStore();
   const { dirHandle, autoSave } = useProjectStore();
+  const confirm = useConfirm();
   const [isAdding, setIsAdding] = useState(false);
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
@@ -88,7 +90,7 @@ export function useSceneOps() {
 
   const handleDeleteScene = useCallback(async (entry: SceneIndexEntry) => {
     if (!dirHandle) return;
-    if (!confirm(`S#${entry.number} "${entry.location}"를 삭제하시겠습니까?`)) return;
+    if (!await confirm(`S#${entry.number} "${entry.location}"를 삭제하시겠습니까?`)) return;
     try {
       await fileIO.deleteFile(dirHandle, `screenplay/${entry.filename}`);
       const newIndex = renumberScenes(index.filter((s) => s.id !== entry.id));
@@ -126,7 +128,7 @@ export function useSceneOps() {
     if (entryIdx === -1 || entryIdx === index.length - 1) return;
     const nextEntry = index[entryIdx + 1];
     if (!dirHandle) return;
-    if (!confirm(`S#${entry.number} "${entry.location}"과 S#${nextEntry.number} "${nextEntry.location}"를 합치겠습니까?\n두 번째 씬은 삭제됩니다.`)) return;
+    if (!await confirm(`S#${entry.number} "${entry.location}"과 S#${nextEntry.number} "${nextEntry.location}"를 합치겠습니까?\n두 번째 씬은 삭제됩니다.`)) return;
     try {
       const [scene, nextScene] = await Promise.all([
         fileIO.readJSON<Scene>(dirHandle, `screenplay/${entry.filename}`),

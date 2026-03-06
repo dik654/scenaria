@@ -2,6 +2,9 @@ import { useEffect, useRef, useState } from 'react';
 import { useProjectStore } from '../store/projectStore';
 import { useSceneStore } from '../store/sceneStore';
 import { usePrompt } from './PromptDialog';
+import { NewProjectDialog } from './NewProjectDialog';
+import { openProjectWithPicker } from '../io/openProject';
+import { useToast } from './Toast';
 
 type EditorMode = 'normal' | 'focus' | 'reading' | 'typewriter';
 type SidePanel = 'none' | 'history' | 'characters' | 'story' | 'consistency' | 'export' | 'settings';
@@ -65,9 +68,11 @@ export function MenuBar({
   onFindOpen: (replace?: boolean) => void;
   onTogglePanel: (p: SidePanel) => void;
 }) {
-  const { meta, historyManager, clearProject } = useProjectStore();
+  const { meta, historyManager, clearProject, setProject, setHistoryManager, setAutoSave, setSettings, setError } = useProjectStore();
   const { currentSceneId, index } = useSceneStore();
   const prompt = usePrompt();
+  const toast = useToast();
+  const [showNewProjectDialog, setShowNewProjectDialog] = useState(false);
   const currentEntry = index.find(s => s.id === currentSceneId);
 
   const title = [
@@ -85,9 +90,20 @@ export function MenuBar({
     await historyManager.createSavePoint(memo || undefined, false);
   };
 
+  const handleOpenProject = async () => {
+    try {
+      await openProjectWithPicker(setProject, setHistoryManager, setAutoSave, setSettings);
+    } catch (err) {
+      if (err instanceof Error && err.name !== 'AbortError') {
+        setError(err.message);
+        toast(err.message, 'error');
+      }
+    }
+  };
+
   const fileItems: MenuItem[] = [
-    { label: '새 프로젝트', action: () => clearProject() },
-    { label: '프로젝트 열기', action: () => clearProject() },
+    { label: '새 프로젝트', action: () => setShowNewProjectDialog(true) },
+    { label: '프로젝트 열기', action: handleOpenProject },
     { separator: true },
     { label: '저장 지점 만들기', shortcut: 'Ctrl+⇧+Enter', action: createSavePoint, disabled: !historyManager },
     { separator: true },
@@ -123,6 +139,13 @@ export function MenuBar({
   ];
 
   return (
+    <>
+    {showNewProjectDialog && (
+      <NewProjectDialog
+        onClose={() => setShowNewProjectDialog(false)}
+        onCreated={() => setShowNewProjectDialog(false)}
+      />
+    )}
     <div className="flex items-center h-9 bg-gray-950 border-b border-gray-800 px-3 gap-3 flex-shrink-0 select-none">
       <span className="text-red-500 font-bold text-sm">씬아리아</span>
       <div className="w-px h-4 bg-gray-800" />
@@ -172,5 +195,6 @@ export function MenuBar({
         ● 저장 지점
       </button>
     </div>
+    </>
   );
 }

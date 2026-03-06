@@ -1,12 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
 import { useProjectStore } from '../store/projectStore';
 import { useSceneStore } from '../store/sceneStore';
+import { usePrompt } from './PromptDialog';
 
 type EditorMode = 'normal' | 'focus' | 'reading' | 'typewriter';
 type SidePanel = 'none' | 'history' | 'characters' | 'story' | 'consistency' | 'export' | 'settings';
 
 type MenuSep = { separator: true };
-type MenuAction = { label: string; shortcut?: string; action: () => void; disabled?: boolean };
+type MenuAction = { label: string; shortcut?: string; action: () => void | Promise<void>; disabled?: boolean };
 export type MenuItem = MenuSep | MenuAction;
 
 function DropdownMenu({ label, items }: { label: string; items: MenuItem[] }) {
@@ -66,6 +67,7 @@ export function MenuBar({
 }) {
   const { meta, historyManager, clearProject } = useProjectStore();
   const { currentSceneId, index } = useSceneStore();
+  const prompt = usePrompt();
   const currentEntry = index.find(s => s.id === currentSceneId);
 
   const title = [
@@ -78,8 +80,9 @@ export function MenuBar({
 
   const createSavePoint = async () => {
     if (!historyManager) return;
-    const memo = prompt('저장 지점 메모 (Enter 건너뛰기):') ?? undefined;
-    await historyManager.createSavePoint(memo, false);
+    const memo = await prompt({ message: '저장 지점 메모', placeholder: 'Enter 건너뛰기' });
+    if (memo === null) return;
+    await historyManager.createSavePoint(memo || undefined, false);
   };
 
   const fileItems: MenuItem[] = [
@@ -95,7 +98,7 @@ export function MenuBar({
     { label: '찾기', shortcut: 'Ctrl+F', action: () => onFindOpen(false) },
     { label: '찾기 및 바꾸기', shortcut: 'Ctrl+H', action: () => onFindOpen(true) },
     { separator: true },
-    { label: '씬 번호로 이동', shortcut: 'Ctrl+G', action: () => { const n = prompt('씬 번호:'); if (!n) return; window.dispatchEvent(new CustomEvent('scenaria:gotoSceneByNumber', { detail: Number(n) })); } },
+    { label: '씬 번호로 이동', shortcut: 'Ctrl+G', action: async () => { const n = await prompt({ message: '씬 번호로 이동', placeholder: '번호 입력' }); if (!n) return; window.dispatchEvent(new CustomEvent('scenaria:gotoSceneByNumber', { detail: Number(n) })); } },
     { label: '새 씬 추가', shortcut: 'Ctrl+⇧+S', action: () => window.dispatchEvent(new CustomEvent('scenaria:addScene')) },
     { separator: true },
     { label: '씬 분할 (선택 블록)', shortcut: 'Ctrl+⇧+\\', action: () => window.dispatchEvent(new CustomEvent('scenaria:splitScene')) },

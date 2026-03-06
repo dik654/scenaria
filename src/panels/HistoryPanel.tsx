@@ -5,10 +5,12 @@ import type { SavePoint, Milestone } from '../io/history/types';
 import { DiffView } from './DiffView';
 import { RestoreDialog } from './RestoreDialog';
 import { MilestoneDialog } from './MilestoneDialog';
+import { usePrompt } from '../components/PromptDialog';
 
 export function HistoryPanel() {
   const { historyManager } = useProjectStore();
   const { savePoints, milestones, setSavePoints, setMilestones, setLoading, isLoading } = useHistoryStore();
+  const prompt = usePrompt();
   const [showDiff, setShowDiff] = useState<{ a: string; b: string } | null>(null);
   const [restoreTarget, setRestoreTarget] = useState<SavePoint | null>(null);
   const [showMilestoneDialog, setShowMilestoneDialog] = useState(false);
@@ -27,7 +29,8 @@ export function HistoryPanel() {
 
   const handleCreateManualSave = async () => {
     if (!historyManager) return;
-    const memo = prompt('저장 지점 메모 (선택사항):') ?? '';
+    const memo = await prompt({ message: '저장 지점 메모', placeholder: '선택사항' });
+    if (memo === null) return;
     const sp = await historyManager.createSavePoint(memo || undefined, false);
     setSavePoints([sp, ...savePoints]);
   };

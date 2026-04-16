@@ -1,4 +1,4 @@
-import type { FileIO } from './types';
+import type { FileIO, ProjectRef } from './types';
 import type { ProjectMeta, AppSettings } from '../types/project';
 import type { SceneIndex } from '../types/scene';
 import type { CharacterIndex } from '../types/character';
@@ -79,7 +79,7 @@ const DEFAULT_CONSISTENCY: ConsistencyData = {
 const DEFAULT_FORESHADOWING: ForeshadowingIndex = { items: [] };
 
 const DEFAULT_SETTINGS: AppSettings = {
-  theme: 'dark',
+  theme: 'light',
   editorFont: 'monospace',
   editorFontSize: 14,
   lineHeight: 1.8,
@@ -94,7 +94,7 @@ const DEFAULT_SETTINGS: AppSettings = {
 
 export async function initializeProject(
   fileIO: FileIO,
-  dirHandle: FileSystemDirectoryHandle,
+  projectRef: ProjectRef,
   projectName: string
 ): Promise<ProjectMeta> {
   const meta: ProjectMeta = {
@@ -116,30 +116,27 @@ export async function initializeProject(
   const threadIndex: ThreadIndex = { threads: [] };
 
   await Promise.all([
-    fileIO.writeJSON(dirHandle, 'project.json', meta),
-    fileIO.writeJSON(dirHandle, 'settings.json', DEFAULT_SETTINGS),
-    fileIO.writeJSON(dirHandle, 'screenplay/_index.json', sceneIndex),
-    fileIO.writeJSON(dirHandle, 'characters/_index.json', charIndex),
-    fileIO.writeJSON(dirHandle, 'story/structure.json', DEFAULT_STRUCTURE),
-    fileIO.writeJSON(dirHandle, 'story/events/_index.json', eventIndex),
-    fileIO.writeJSON(dirHandle, 'story/threads/_index.json', threadIndex),
-    fileIO.writeJSON(dirHandle, 'story/foreshadowing.json', DEFAULT_FORESHADOWING),
-    fileIO.writeJSON(dirHandle, 'story/consistency.json', DEFAULT_CONSISTENCY),
-    fileIO.writeJSON(dirHandle, 'ai-history.json', { entries: [] }),
+    fileIO.writeJSON(projectRef, 'project.json', meta),
+    fileIO.writeJSON(projectRef, 'settings.json', DEFAULT_SETTINGS),
+    fileIO.writeJSON(projectRef, 'screenplay/_index.json', sceneIndex),
+    fileIO.writeJSON(projectRef, 'characters/_index.json', charIndex),
+    fileIO.writeJSON(projectRef, 'story/structure.json', DEFAULT_STRUCTURE),
+    fileIO.writeJSON(projectRef, 'story/events/_index.json', eventIndex),
+    fileIO.writeJSON(projectRef, 'story/threads/_index.json', threadIndex),
+    fileIO.writeJSON(projectRef, 'story/foreshadowing.json', DEFAULT_FORESHADOWING),
+    fileIO.writeJSON(projectRef, 'story/consistency.json', DEFAULT_CONSISTENCY),
+    fileIO.writeJSON(projectRef, 'ai-history.json', { entries: [] }),
   ]);
 
-  // Write version file
-  const verFh = await dirHandle.getFileHandle('.scenaria-version', { create: true });
-  const wr = await verFh.createWritable();
-  await wr.write('1');
-  await wr.close();
+  // Write version marker
+  await fileIO.writeJSON(projectRef, '.scenaria-version', '1');
 
   return meta;
 }
 
 export async function loadProject(
   fileIO: FileIO,
-  dirHandle: FileSystemDirectoryHandle
+  projectRef: ProjectRef
 ): Promise<ProjectMeta> {
-  return fileIO.readJSON<ProjectMeta>(dirHandle, 'project.json');
+  return fileIO.readJSON<ProjectMeta>(projectRef, 'project.json');
 }

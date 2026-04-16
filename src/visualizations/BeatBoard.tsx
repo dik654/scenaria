@@ -1,8 +1,17 @@
 import { useState, useEffect } from 'react';
 import { useSceneStore } from '../store/sceneStore';
 import { useProjectStore } from '../store/projectStore';
+import { useStoryStore } from '../store/storyStore';
+import { useConfirm } from '../components/ConfirmDialog';
 import { fileIO } from '../io';
+import { Sparkles, Loader2 } from 'lucide-react';
 import type { SceneIndexEntry } from '../types/scene';
+import { useVisualizationAI } from './hooks/useVisualizationAI';
+import {
+  SYSTEM_BEAT_GENERATION,
+  buildBeatGenPrompt,
+  type BeatGenResult,
+} from '../ai/prompts/visualizationGen';
 
 // Blake Snyder Beat Sheet (Save the Cat)
 interface Beat {
@@ -39,9 +48,9 @@ interface BeatAssignments {
 }
 
 const ACT_COLORS: Record<number, string> = {
-  1: 'border-blue-800/50 bg-blue-950/20',
-  2: 'border-purple-800/50 bg-purple-950/20',
-  3: 'border-green-800/50 bg-green-950/20',
+  1: 'border-blue-200 bg-blue-50/50',
+  2: 'border-purple-200 bg-purple-50/50',
+  3: 'border-green-200 bg-green-50/50',
 };
 
 const ACT_LABEL_COLORS: Record<number, string> = {
@@ -52,27 +61,44 @@ const ACT_LABEL_COLORS: Record<number, string> = {
 
 export function BeatBoard({ onSceneSelect }: { onSceneSelect?: (sceneId: string) => void }) {
   const { index: scenes } = useSceneStore();
-  const { dirHandle } = useProjectStore();
+  const { projectRef } = useProjectStore();
+  const { structure, setStructure } = useStoryStore();
+  const confirm = useConfirm();
   const [assignments, setAssignments] = useState<BeatAssignments>({ assignments: {} });
   const [expanded, setExpanded] = useState<string | null>(null);
   const [draggingScene, setDraggingScene] = useState<SceneIndexEntry | null>(null);
   const [showAutoAssign, setShowAutoAssign] = useState(false);
+  const [suggestedScenes, setSuggestedScenes] = useState<BeatGenResult['suggestedScenes'] | null>(null);
+  const [aiRequirements, setAiRequirements] = useState('');
+  const [showRequirements, setShowRequirements] = useState(false);
+
+  // AI beat descriptions from storyStore (merged with defaults)
+  const getBeatDescription = (beatId: string, defaultDesc: string): string => {
+    const storeBeat = structure?.beats?.find(b => b.id === beatId);
+    return storeBeat?.description || defaultDesc;
+  };
+
+  const { generate, generating, streamText, error, stop } = useVisualizationAI<BeatGenResult>({
+    systemPrompt: SYSTEM_BEAT_GENERATION,
+    buildUserPrompt: buildBeatGenPrompt,
+    maxTokens: 4096,
+  });
 
   useEffect(() => {
-    if (!dirHandle) return;
-    fileIO.readJSON<BeatAssignments>(dirHandle, 'story/beats.json')
+    if (!projectRef) return;
+    fileIO.readJSON<BeatAssignments>(projectRef, 'story/beats.json')
       .then(data => setAssignments(data))
       .catch(() => {
         // Auto-assign by position on first load
         autoAssign();
       });
-  }, [dirHandle]);
+  }, [projectRef]);
 
   const saveAssignments = async (next: BeatAssignments) => {
     setAssignments(next);
-    if (!dirHandle) return;
+    if (!projectRef) return;
     try {
-      await fileIO.writeJSON(dirHandle, 'story/beats.json', next);
+      await fileIO.writeJSON(projectRef, 'story/beats.json', next);
     } catch (e) {
       console.error('비트 저장 실패:', e);
     }
@@ -86,7 +112,6 @@ export function BeatBoard({ onSceneSelect }: { onSceneSelect?: (sceneId: string)
 
     for (const scene of scenes) {
       const pos = (scene.number - 1) / Math.max(1, total - 1);
-      // Find closest beat zone
       let closest = BEATS[0];
       let minDist = Math.abs(BEATS[0].position - pos);
       for (const b of BEATS) {
@@ -123,29 +148,157 @@ export function BeatBoard({ onSceneSelect }: { onSceneSelect?: (sceneId: string)
     saveAssignments(next);
   };
 
+  const handleAIGenerate = async (requirements?: string) => {
+    if (structure?.beats?.length) {
+      const ok = await confirm('기존 비트 설명을 AI 생성 결과로 대체합니다. 계속하시겠습니까?');
+      if (!ok) return;
+    }
+    const result = await generate(requirements);
+    if (!result) return;
+
+    // Update storyStore structure with AI-generated beat descriptions
+    const beats = BEATS.map(b => ({
+      id: b.id,
+      name: b.koreanName,
+      description: result.beatDescriptions[b.id] ?? b.description,
+      relativePosition: b.position,
+      act: b.act <= 1 ? '1막' as const : b.act === 2 ? '2막 전반' as const : '3막' as const,
+    }));
+    const newStructure = {
+      templateName: 'Save The Cat',
+      acts: structure?.acts ?? [
+        { name: '1막', startPercent: 0, endPercent: 20 },
+        { name: '2막 전반', startPercent: 20, endPercent: 50 },
+        { name: '2막 후반', startPercent: 50, endPercent: 80 },
+        { name: '3막', startPercent: 80, endPercent: 100 },
+      ],
+      beats,
+      availableTemplates: structure?.availableTemplates ?? ['3막 구조', 'Save The Cat', '영웅의 여정', '5막 구조'],
+    };
+    setStructure(newStructure);
+    if (projectRef) {
+      await fileIO.writeJSON(projectRef, 'story/structure.json', newStructure).catch(console.error);
+    }
+
+    // Store suggested scenes for display
+    if (result.suggestedScenes) {
+      setSuggestedScenes(result.suggestedScenes);
+    }
+    setShowRequirements(false);
+    setAiRequirements('');
+  };
+
   const unassignedScenes = scenes.filter(s =>
     !Object.values(assignments.assignments).flat().includes(s.id)
   );
 
   const actGroups = [1, 2, 3] as const;
 
+  // Empty state — no scenes and no AI-generated descriptions
+  const hasAIDescriptions = structure?.beats?.some(b => b.description && !BEATS.find(d => d.id === b.id && d.description === b.description));
+  if (scenes.length === 0 && !hasAIDescriptions && !generating) {
+    return (
+      <div className="flex flex-col h-full overflow-hidden">
+        <div className="flex items-center justify-between px-4 py-2 border-b border-gray-200 flex-shrink-0">
+          <div className="flex items-center gap-3">
+            <span className="text-xs font-medium text-gray-600">비트 보드</span>
+            <span className="text-xs text-gray-600">Blake Snyder Beat Sheet</span>
+          </div>
+        </div>
+        <div className="flex-1 flex flex-col items-center justify-center px-8 gap-3">
+          <Sparkles className="w-8 h-8 text-violet-300" />
+          <p className="text-sm text-gray-500 text-center">AI가 프로젝트 정보를 바탕으로 비트별 씬 구성을 제안합니다</p>
+          <p className="text-xs text-gray-400 text-center">캐릭터, 로그라인, 장르 등을 자동으로 참고합니다</p>
+          {error && <p className="text-xs text-red-500">{error}</p>}
+          {!showRequirements ? (
+            <div className="flex flex-col gap-2 w-full max-w-sm mt-2">
+              <button
+                onClick={() => handleAIGenerate()}
+                className="w-full flex items-center justify-center gap-1.5 py-2.5 text-xs font-medium bg-violet-500 hover:bg-violet-600 text-white rounded transition-colors"
+              >
+                <Sparkles className="w-3.5 h-3.5" />
+                AI로 자동 생성
+              </button>
+              <button
+                onClick={() => setShowRequirements(true)}
+                className="w-full py-2 text-xs text-gray-500 hover:text-gray-700 border border-gray-200 rounded transition-colors"
+              >
+                요구사항 직접 입력
+              </button>
+            </div>
+          ) : (
+            <div className="flex flex-col gap-2 w-full max-w-sm mt-2">
+              <textarea
+                value={aiRequirements}
+                onChange={e => setAiRequirements(e.target.value)}
+                placeholder="원하는 방향을 설명해주세요 (예: 반전이 많은 스릴러, 주인공의 내면 갈등 중심)"
+                rows={3}
+                className="w-full bg-gray-50 text-gray-800 text-xs px-3 py-2 rounded border border-gray-200 focus:outline-none focus:border-violet-400 resize-none"
+              />
+              <div className="flex gap-2">
+                <button onClick={() => setShowRequirements(false)} className="flex-1 py-2 text-xs border border-gray-200 rounded text-gray-500 hover:bg-gray-50">취소</button>
+                <button
+                  onClick={() => handleAIGenerate(aiRequirements)}
+                  className="flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-medium bg-violet-500 hover:bg-violet-600 text-white rounded"
+                >
+                  <Sparkles className="w-3.5 h-3.5" />
+                  생성
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // Generating state
+  if (generating) {
+    return (
+      <div className="flex flex-col h-full overflow-hidden">
+        <div className="flex items-center justify-between px-4 py-2 border-b border-gray-200 flex-shrink-0">
+          <div className="flex items-center gap-3">
+            <span className="text-xs font-medium text-gray-600">비트 보드</span>
+          </div>
+        </div>
+        <div className="flex-1 flex flex-col items-center justify-center px-8 gap-3">
+          <Loader2 className="w-6 h-6 animate-spin text-violet-500" />
+          <span className="text-xs text-gray-500">AI가 비트 구조를 생성하고 있습니다...</span>
+          {streamText && (
+            <pre className="text-xs text-gray-400 whitespace-pre-wrap max-h-40 overflow-y-auto font-mono leading-relaxed w-full max-w-lg">
+              {streamText.slice(-400)}
+            </pre>
+          )}
+          <button onClick={stop} className="text-xs text-red-500 hover:text-red-400 border border-red-200 rounded px-3 py-1">중단</button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col h-full overflow-hidden">
       {/* Toolbar */}
-      <div className="flex items-center justify-between px-4 py-2 border-b border-gray-800 flex-shrink-0">
+      <div className="flex items-center justify-between px-4 py-2 border-b border-gray-200 flex-shrink-0">
         <div className="flex items-center gap-3">
-          <span className="text-xs font-medium text-gray-400">비트 보드</span>
+          <span className="text-xs font-medium text-gray-600">비트 보드</span>
           <span className="text-xs text-gray-600">Blake Snyder Beat Sheet</span>
         </div>
         <div className="flex items-center gap-2">
           {unassignedScenes.length > 0 && (
-            <span className="text-xs text-yellow-600 bg-yellow-950/50 px-2 py-0.5 rounded">
+            <span className="text-xs text-yellow-600 bg-yellow-50 px-2 py-0.5 rounded">
               미배정 {unassignedScenes.length}씬
             </span>
           )}
           <button
+            onClick={() => handleAIGenerate()}
+            className="text-xs text-violet-500 hover:text-violet-700 border border-violet-200 rounded px-2 py-0.5 transition-colors flex items-center gap-1"
+          >
+            <Sparkles className="w-3 h-3" />
+            AI 생성
+          </button>
+          <button
             onClick={() => setShowAutoAssign(true)}
-            className="text-xs text-gray-500 hover:text-gray-300 border border-gray-700 rounded px-2 py-0.5 transition-colors"
+            className="text-xs text-gray-500 hover:text-gray-700 border border-gray-200 rounded px-2 py-0.5 transition-colors"
           >
             자동 배정
           </button>
@@ -154,10 +307,16 @@ export function BeatBoard({ onSceneSelect }: { onSceneSelect?: (sceneId: string)
 
       {/* Auto-assign confirm */}
       {showAutoAssign && (
-        <div className="flex items-center gap-3 px-4 py-2 bg-yellow-950/30 border-b border-yellow-800/30 text-xs flex-shrink-0">
-          <span className="text-yellow-400">씬 번호 기준으로 자동 배정하시겠습니까?</span>
+        <div className="flex items-center gap-3 px-4 py-2 bg-yellow-50 border-b border-yellow-200 text-xs flex-shrink-0">
+          <span className="text-yellow-600">씬 번호 기준으로 자동 배정하시겠습니까?</span>
           <button onClick={autoAssign} className="text-green-400 hover:text-green-300">확인</button>
           <button onClick={() => setShowAutoAssign(false)} className="text-gray-500 hover:text-gray-400">취소</button>
+        </div>
+      )}
+
+      {error && (
+        <div className="px-4 py-2 bg-red-50 border-b border-red-100 text-xs text-red-500 flex-shrink-0">
+          {error}
         </div>
       )}
 
@@ -179,6 +338,8 @@ export function BeatBoard({ onSceneSelect }: { onSceneSelect?: (sceneId: string)
                     .map(id => scenes.find(s => s.id === id))
                     .filter(Boolean) as SceneIndexEntry[];
                   const isExpanded = expanded === beat.id;
+                  const desc = getBeatDescription(beat.id, beat.description);
+                  const suggested = suggestedScenes?.[beat.id];
 
                   return (
                     <div
@@ -196,13 +357,24 @@ export function BeatBoard({ onSceneSelect }: { onSceneSelect?: (sceneId: string)
                         onClick={() => setExpanded(isExpanded ? null : beat.id)}
                       >
                         <div className="flex items-center justify-between mb-0.5">
-                          <span className="text-xs font-bold text-white truncate">{beat.koreanName}</span>
+                          <span className="text-xs font-bold text-gray-800 truncate">{beat.koreanName}</span>
                           <span className="text-xs text-gray-600 ml-1">{Math.round(beat.position * 100)}%</span>
                         </div>
                         <p className="text-xs text-gray-500 leading-tight">
-                          {isExpanded ? beat.description : beat.description.slice(0, 30) + '…'}
+                          {isExpanded ? desc : desc.slice(0, 30) + (desc.length > 30 ? '…' : '')}
                         </p>
                       </div>
+
+                      {/* AI suggested scenes */}
+                      {isExpanded && suggested && suggested.length > 0 && (
+                        <div className="mt-1.5 space-y-1">
+                          {suggested.map((s, i) => (
+                            <div key={i} className="text-xs text-violet-500 bg-violet-50 rounded px-1.5 py-0.5 leading-tight">
+                              {s.location} — {s.summary}
+                            </div>
+                          ))}
+                        </div>
+                      )}
 
                       {/* Assigned scenes */}
                       <div className="mt-2 space-y-1">
@@ -211,15 +383,15 @@ export function BeatBoard({ onSceneSelect }: { onSceneSelect?: (sceneId: string)
                             key={scene.id}
                             draggable
                             onDragStart={() => setDraggingScene(scene)}
-                            className="group flex items-center gap-1 bg-gray-800/60 rounded px-2 py-1 cursor-grab hover:bg-gray-700/60 transition-colors"
+                            className="group flex items-center gap-1 bg-gray-100 rounded px-2 py-1 cursor-grab hover:bg-gray-100 transition-colors"
                           >
                             <button
                               onClick={() => onSceneSelect?.(scene.id)}
-                              className="text-xs text-red-400 font-mono font-bold shrink-0 hover:text-red-300"
+                              className="text-xs text-blue-500 font-mono font-bold shrink-0 hover:text-blue-600"
                             >
-                              S#{scene.number}
+                              장면 {scene.number}
                             </button>
-                            <span className="text-xs text-gray-300 truncate flex-1">{scene.location}</span>
+                            <span className="text-xs text-gray-600 truncate flex-1">{scene.location}</span>
                             <button
                               onClick={(e) => { e.stopPropagation(); removeFromBeat(beat.id, scene.id); }}
                               className="text-gray-700 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity text-xs"
@@ -228,8 +400,8 @@ export function BeatBoard({ onSceneSelect }: { onSceneSelect?: (sceneId: string)
                             </button>
                           </div>
                         ))}
-                        {assignedScenes.length === 0 && (
-                          <div className="text-xs text-gray-700 text-center py-2 border border-dashed border-gray-800 rounded">
+                        {assignedScenes.length === 0 && !suggested?.length && (
+                          <div className="text-xs text-gray-400 text-center py-2 border border-dashed border-gray-200 rounded">
                             씬 드래그
                           </div>
                         )}
@@ -244,7 +416,7 @@ export function BeatBoard({ onSceneSelect }: { onSceneSelect?: (sceneId: string)
 
         {/* Unassigned pool */}
         {unassignedScenes.length > 0 && (
-          <div className="mt-4 border-t border-gray-800 pt-4">
+          <div className="mt-4 border-t border-gray-200 pt-4">
             <p className="text-xs text-gray-600 mb-2">미배정 씬 (드래그하여 비트에 배정)</p>
             <div className="flex flex-wrap gap-2">
               {unassignedScenes.map(scene => (
@@ -252,10 +424,10 @@ export function BeatBoard({ onSceneSelect }: { onSceneSelect?: (sceneId: string)
                   key={scene.id}
                   draggable
                   onDragStart={() => setDraggingScene(scene)}
-                  className="flex items-center gap-1 bg-gray-800 rounded px-2 py-1 cursor-grab hover:bg-gray-700 transition-colors"
+                  className="flex items-center gap-1 bg-gray-100 rounded px-2 py-1 cursor-grab hover:bg-gray-100 transition-colors"
                 >
-                  <span className="text-xs text-red-400 font-mono font-bold">S#{scene.number}</span>
-                  <span className="text-xs text-gray-300">{scene.location}</span>
+                  <span className="text-xs text-blue-500 font-mono font-bold">장면 {scene.number}</span>
+                  <span className="text-xs text-gray-600">{scene.location}</span>
                 </div>
               ))}
             </div>

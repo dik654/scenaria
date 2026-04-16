@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
+import { Search } from 'lucide-react';
 import { useSceneStore } from '../store/sceneStore';
 import type { SceneStatus } from '../types/scene';
-import { STATUS_BG_BUTTON } from '../utils/statusMapping';
 import { SceneCard } from './sceneNavigator/SceneCard';
 import { useSceneOps } from './sceneNavigator/useSceneOps';
 
@@ -44,73 +44,91 @@ export function SceneNavigator() {
 
   const total = index.length;
 
+  const STATUS_COLORS: Record<string, { active: string; dot: string }> = {
+    all:      { active: 'bg-zinc-100 text-zinc-700', dot: '' },
+    outline:  { active: 'bg-zinc-100 text-zinc-600', dot: 'bg-zinc-400' },
+    draft:    { active: 'bg-blue-50 text-blue-600', dot: 'bg-blue-400' },
+    revision: { active: 'bg-amber-50 text-amber-600', dot: 'bg-amber-400' },
+    done:     { active: 'bg-emerald-50 text-emerald-600', dot: 'bg-emerald-400' },
+  };
+
   return (
-    <div className="w-52 flex-shrink-0 bg-gray-900 border-r border-gray-800 flex flex-col">
-      <div className="flex items-center justify-between px-3 py-2 border-b border-gray-800">
-        <span className="text-xs font-medium text-gray-400 uppercase tracking-wider">씬 목록</span>
+    <div className="w-56 flex-shrink-0 bg-white border-r border-zinc-200/80 flex flex-col min-h-0">
+      {/* Header */}
+      <div className="flex items-center justify-between px-3 py-2.5">
+        <span className="text-[13px] font-semibold text-zinc-700 tracking-tight">씬 목록</span>
         <button
           onClick={handleAddScene}
           disabled={isAdding}
           title="새 씬 추가 (Ctrl+Shift+S)"
-          className="text-gray-500 hover:text-red-400 transition-colors text-lg leading-none disabled:opacity-50"
+          className="w-6 h-6 flex items-center justify-center rounded-lg text-zinc-400 hover:text-blue-600 hover:bg-blue-50 transition-colors disabled:opacity-40"
         >
-          +
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.75"><line x1="7" y1="2" x2="7" y2="12"/><line x1="2" y1="7" x2="12" y2="7"/></svg>
         </button>
       </div>
 
+      {/* Progress bar */}
       {total > 0 && (
-        <div className="px-2 pt-1.5">
-          <div className="flex h-1.5 rounded-full overflow-hidden bg-gray-800" title={`완료 ${statusCounts.done} · 수정 ${statusCounts.revision} · 초고 ${statusCounts.draft} · 아웃라인 ${statusCounts.outline}`}>
-            {statusCounts.done > 0    && <div style={{ width: `${statusCounts.done    / total * 100}%` }} className="bg-green-500" />}
-            {statusCounts.revision > 0 && <div style={{ width: `${statusCounts.revision / total * 100}%` }} className="bg-yellow-500" />}
-            {statusCounts.draft > 0   && <div style={{ width: `${statusCounts.draft   / total * 100}%` }} className="bg-blue-500" />}
-            {statusCounts.outline > 0 && <div style={{ width: `${statusCounts.outline / total * 100}%` }} className="bg-gray-500" />}
+        <div className="px-3 pb-2">
+          <div className="flex h-1 rounded-full overflow-hidden bg-zinc-100" title={`완료 ${statusCounts.done} · 수정 ${statusCounts.revision} · 초고 ${statusCounts.draft} · 아웃라인 ${statusCounts.outline}`}>
+            {statusCounts.done > 0    && <div style={{ width: `${statusCounts.done    / total * 100}%` }} className="bg-emerald-400" />}
+            {statusCounts.revision > 0 && <div style={{ width: `${statusCounts.revision / total * 100}%` }} className="bg-amber-400" />}
+            {statusCounts.draft > 0   && <div style={{ width: `${statusCounts.draft   / total * 100}%` }} className="bg-blue-400" />}
+            {statusCounts.outline > 0 && <div style={{ width: `${statusCounts.outline / total * 100}%` }} className="bg-zinc-300" />}
           </div>
-          <p className="text-xs text-gray-700 mt-0.5">완료 {statusCounts.done}/{total}</p>
         </div>
       )}
 
-      <div className="px-2 pb-1 flex flex-wrap gap-1">
+      {/* Status filter chips */}
+      <div className="px-2 pb-2 flex flex-wrap gap-1">
         {([
-          { id: 'all',      label: `전체 ${total}`,                   active: 'bg-gray-600 text-white' },
-          { id: 'outline',  label: `아웃 ${statusCounts.outline}`,    active: `${STATUS_BG_BUTTON.outline} text-white` },
-          { id: 'draft',    label: `초고 ${statusCounts.draft}`,      active: `${STATUS_BG_BUTTON.draft} text-white` },
-          { id: 'revision', label: `수정 ${statusCounts.revision}`,   active: `${STATUS_BG_BUTTON.revision} text-white` },
-          { id: 'done',     label: `완료 ${statusCounts.done}`,       active: `${STATUS_BG_BUTTON.done} text-white` },
-        ] as const).map(chip => (
-          <button
-            key={chip.id}
-            onClick={() => setStatusFilter(chip.id as SceneStatus | 'all')}
-            className={`text-xs px-1.5 py-0.5 rounded-full transition-colors ${
-              statusFilter === chip.id ? chip.active : 'text-gray-600 hover:text-gray-400'
-            }`}
-          >
-            {chip.label}
-          </button>
-        ))}
+          { id: 'all',      label: `전체 ${total}` },
+          { id: 'outline',  label: `아웃 ${statusCounts.outline}` },
+          { id: 'draft',    label: `초고 ${statusCounts.draft}` },
+          { id: 'revision', label: `수정 ${statusCounts.revision}` },
+          { id: 'done',     label: `완료 ${statusCounts.done}` },
+        ] as const).map(chip => {
+          const colors = STATUS_COLORS[chip.id];
+          return (
+            <button
+              key={chip.id}
+              onClick={() => setStatusFilter(chip.id as SceneStatus | 'all')}
+              className={`text-[11px] px-2 py-0.5 rounded-full transition-colors ${
+                statusFilter === chip.id ? colors.active + ' font-medium' : 'text-zinc-400 hover:text-zinc-600 hover:bg-zinc-100'
+              }`}
+            >
+              {chip.label}
+            </button>
+          );
+        })}
       </div>
 
-      <div className="px-2 py-1.5 border-b border-gray-800">
-        <input
-          value={filter}
-          onChange={e => setFilter(e.target.value)}
-          placeholder="위치/요약 검색..."
-          className="w-full bg-gray-800 border border-gray-700 rounded px-2 py-1 text-xs text-gray-300 placeholder-gray-600 focus:outline-none focus:border-gray-500"
-        />
+      {/* Search */}
+      <div className="px-2 pb-2">
+        <div className="relative">
+          <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-zinc-300" strokeWidth={1.5} />
+          <input
+            value={filter}
+            onChange={e => setFilter(e.target.value)}
+            placeholder="검색..."
+            className="w-full bg-zinc-50 border border-zinc-200 rounded-lg pl-7 pr-2 py-1.5 text-xs text-zinc-700 placeholder-zinc-400 focus:outline-none focus:border-blue-300 focus:ring-1 focus:ring-blue-100 transition-colors"
+          />
+        </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto">
+      {/* Scene list */}
+      <div className="flex-1 overflow-y-auto px-1.5">
         {index.length === 0 ? (
-          <div className="text-center py-8 px-3">
-            <p className="text-xs text-gray-600">씬이 없습니다</p>
-            <button onClick={handleAddScene} className="mt-2 text-xs text-red-500 hover:text-red-400">
-              첫 씬 추가
+          <div className="text-center py-10 px-3">
+            <p className="text-sm text-zinc-400">씬이 없습니다</p>
+            <button onClick={handleAddScene} className="mt-3 text-xs text-blue-600 hover:text-blue-700 font-medium">
+              + 첫 씬 추가
             </button>
           </div>
         ) : filtered.length === 0 ? (
-          <div className="text-center py-6 px-3">
-            <p className="text-xs text-gray-600">"{filter}" 결과 없음</p>
-            <button onClick={() => setFilter('')} className="mt-1 text-xs text-gray-600 hover:text-gray-400">초기화</button>
+          <div className="text-center py-8 px-3">
+            <p className="text-xs text-zinc-400">"{filter}" 결과 없음</p>
+            <button onClick={() => setFilter('')} className="mt-1 text-xs text-blue-600 hover:text-blue-700">초기화</button>
           </div>
         ) : (
           filtered.map((entry) => {
@@ -122,7 +140,7 @@ export function SceneNavigator() {
                 onDragStart={() => setDragIndex(i)}
                 onDragOver={(e) => { e.preventDefault(); setDragOverIndex(i); }}
                 onDragEnd={handleDragEnd}
-                className={`transition-all ${dragOverIndex === i && dragIndex !== i ? 'border-t-2 border-red-500' : ''}`}
+                className={`transition-all ${dragOverIndex === i && dragIndex !== i ? 'border-t-2 border-blue-400' : ''}`}
               >
                 <SceneCard
                   entry={entry}
@@ -139,7 +157,8 @@ export function SceneNavigator() {
         )}
       </div>
 
-      <div className="px-3 py-2 border-t border-gray-800 text-xs text-gray-600">
+      {/* Footer */}
+      <div className="px-3 py-2 border-t border-zinc-200/80 text-[11px] text-zinc-400">
         {filter ? `${filtered.length}/${index.length}씬` : `총 ${index.length}씬`}
       </div>
     </div>

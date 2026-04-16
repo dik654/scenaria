@@ -62,6 +62,12 @@ export interface SceneHeader {
 
 export type SceneStatus = 'outline' | 'draft' | 'revision' | 'done';
 
+export interface CharacterState {
+  characterId: string;
+  emotional: string;
+  situation: string;
+}
+
 export interface SceneMeta {
   summary: string;
   emotionalTone: string[];
@@ -72,6 +78,7 @@ export interface SceneMeta {
   notes?: string;
   cardColor?: string;
   status?: SceneStatus;
+  characterStates?: CharacterState[];
 }
 
 export interface UnidentifiedCharacter {

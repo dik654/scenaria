@@ -44,10 +44,10 @@ export function DiffView({ saveIdA, saveIdB, onClose }: DiffViewProps) {
 
   return (
     <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
-      <div className="bg-gray-900 border border-gray-700 rounded-xl w-full max-w-5xl max-h-screen overflow-hidden flex flex-col shadow-2xl">
+      <div className="bg-white border border-gray-200 rounded-xl w-full max-w-5xl max-h-screen overflow-hidden flex flex-col shadow-lg">
         {/* Header */}
-        <div className="flex items-center justify-between px-4 py-3 border-b border-gray-700">
-          <h2 className="text-sm font-medium text-white">비교</h2>
+        <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200">
+          <h2 className="text-sm font-medium text-gray-800">비교</h2>
           <div className="flex items-center gap-4">
             {diff && (
               <span className="text-xs text-gray-500">
@@ -58,17 +58,17 @@ export function DiffView({ saveIdA, saveIdB, onClose }: DiffViewProps) {
               <button
                 onClick={() => setCurrentHunkIndex(Math.max(0, currentHunkIndex - 1))}
                 disabled={currentHunkIndex === 0}
-                className="text-xs text-gray-500 hover:text-white disabled:opacity-30 px-2 py-1 border border-gray-700 rounded"
+                className="text-xs text-gray-500 hover:text-gray-800 disabled:opacity-30 px-2 py-1 border border-gray-200 rounded"
               >
                 ◀ 이전
               </button>
-              <span className="text-xs text-gray-400">
+              <span className="text-xs text-gray-500">
                 {diff ? `${currentHunkIndex + 1} / ${diff.hunks.length}` : '-'}
               </span>
               <button
                 onClick={() => setCurrentHunkIndex(Math.min((diff?.hunks.length ?? 1) - 1, currentHunkIndex + 1))}
                 disabled={!diff || currentHunkIndex >= diff.hunks.length - 1}
-                className="text-xs text-gray-500 hover:text-white disabled:opacity-30 px-2 py-1 border border-gray-700 rounded"
+                className="text-xs text-gray-500 hover:text-gray-800 disabled:opacity-30 px-2 py-1 border border-gray-200 rounded"
               >
                 다음 ▶
               </button>
@@ -95,15 +95,15 @@ export function DiffView({ saveIdA, saveIdB, onClose }: DiffViewProps) {
           <div className="flex-1 overflow-hidden flex flex-col">
             {hunk && (
               <>
-                <div className="px-4 py-2 bg-gray-800/50 border-b border-gray-700">
-                  <span className="text-xs font-mono text-yellow-400">{hunk.path}</span>
+                <div className="px-4 py-2 bg-gray-50 border-b border-gray-200">
+                  <span className="text-xs font-mono text-amber-600">{hunk.path}</span>
                 </div>
                 <div className="flex-1 grid grid-cols-2 gap-0 overflow-hidden">
-                  <div className="border-r border-gray-700 p-4 overflow-auto bg-red-950/10">
+                  <div className="border-r border-gray-200 p-4 overflow-auto bg-red-50/30">
                     <div className="text-xs text-red-400 font-medium mb-2">이전</div>
                     {renderJSON(hunk.oldContent, 'old')}
                   </div>
-                  <div className="p-4 overflow-auto bg-green-950/10">
+                  <div className="p-4 overflow-auto bg-green-50/30">
                     <div className="text-xs text-green-400 font-medium mb-2">현재</div>
                     {renderJSON(hunk.newContent, 'new')}
                   </div>

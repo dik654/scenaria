@@ -143,7 +143,7 @@ export function TensionFlow({ onSceneClick }: { onSceneClick?: (sceneId: string)
     dots
       .on('mouseover', (event, d) => {
         tooltip.style('opacity', '1')
-          .html(`<strong>S#${d.number}</strong><br/>${d.location}<br/>긴장도: ${d.tension}`);
+          .html(`<strong>장면 ${d.number}</strong><br/>${d.location}<br/>몰입도: ${d.tension}`);
       })
       .on('mousemove', (event) => {
         tooltip
@@ -155,7 +155,7 @@ export function TensionFlow({ onSceneClick }: { onSceneClick?: (sceneId: string)
     // X axis — scene numbers
     const xAxis = d3.axisBottom(xScale)
       .tickValues(data.filter((_, i) => i % Math.max(1, Math.floor(scenes.length / 10)) === 0).map(d => d.sceneIndex))
-      .tickFormat(i => `S#${scenes[i as number]?.number ?? ''}`);
+      .tickFormat(i => `장면 ${scenes[i as number]?.number ?? ''}`);
 
     g.append('g')
       .attr('transform', `translate(0,${innerH})`)
@@ -184,7 +184,7 @@ export function TensionFlow({ onSceneClick }: { onSceneClick?: (sceneId: string)
   if (scenes.length === 0) {
     return (
       <div className="flex items-center justify-center h-full text-gray-600 text-sm">
-        씬을 추가하면 긴장도 그래프가 표시됩니다
+        씬을 추가하면 몰입도 그래프가 표시됩니다
       </div>
     );
   }

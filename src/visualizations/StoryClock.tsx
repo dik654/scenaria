@@ -127,7 +127,7 @@ export function StoryClock() {
           .on('mouseover', function() { setHoveredScene(scene.id); })
           .on('mouseout', function() { setHoveredScene(null); })
           .append('title')
-          .text(`S#${scene.number}: ${scene.location}`);
+          .text(`장면 ${scene.number}: ${scene.location}`);
       });
 
       // Progress arc (thin line from start to current)

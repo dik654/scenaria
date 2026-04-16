@@ -3,18 +3,19 @@ import { useSceneStore } from '../../store/sceneStore';
 import { useProjectStore } from '../../store/projectStore';
 import { useCharacterStore } from '../../store/characterStore';
 import { fileIO } from '../../io';
+import type { ProjectRef } from '../../io/types';
 import type { Scene } from '../../types/scene';
 import type { Character } from '../../types/character';
-import { renderFullScreenplayTXT, buildLLMContextText, sceneToFountain } from '../../utils/formatRenderer';
+import { renderFullScreenplayTXT, buildLLMContextText, sceneToFountain, renderScreenplayHTML } from '../../utils/formatRenderer';
 import { renderScreenplayDOCX } from '../../utils/docxRenderer';
 import { useToast } from '../../components/Toast';
 
-export type ExportFormat = 'txt' | 'fountain' | 'llm-context' | 'docx';
+export type ExportFormat = 'txt' | 'fountain' | 'llm-context' | 'docx' | 'pdf';
 
 async function loadCharMap(
   charIndex: { id: string; filename: string }[],
   characters: Record<string, Character>,
-  dirHandle: FileSystemDirectoryHandle,
+  projectRef: ProjectRef,
 ): Promise<Record<string, Character>> {
   const charMap: Record<string, Character> = {};
   for (const entry of charIndex) {
@@ -22,7 +23,7 @@ async function loadCharMap(
       charMap[entry.id] = characters[entry.id];
     } else {
       try {
-        charMap[entry.id] = await fileIO.readJSON<Character>(dirHandle, `characters/${entry.filename}`);
+        charMap[entry.id] = await fileIO.readJSON<Character>(projectRef, `characters/${entry.filename}`);
       } catch {/* skip */}
     }
   }
@@ -31,14 +32,14 @@ async function loadCharMap(
 
 export function useExportOps() {
   const { index: sceneIndex, currentScene } = useSceneStore();
-  const { meta, dirHandle } = useProjectStore();
+  const { meta, projectRef } = useProjectStore();
   const { index: charIndex, characters } = useCharacterStore();
   const toast = useToast();
   const [isExporting, setIsExporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const handleExport = async (format: ExportFormat, scope: 'all' | 'current') => {
-    if (!dirHandle || !meta) return;
+    if (!projectRef || !meta) return;
     setIsExporting(true);
     setError(null);
     try {
@@ -49,17 +50,28 @@ export function useExportOps() {
       } else {
         for (const entry of sceneIndex) {
           try {
-            const scene = await fileIO.readJSON<Scene>(dirHandle, `screenplay/${entry.filename}`);
+            const scene = await fileIO.readJSON<Scene>(projectRef, `screenplay/${entry.filename}`);
             scenes.push({ scene, number: entry.number });
           } catch { console.warn(`씬 ${entry.id} 로드 실패`); }
         }
       }
 
-      const charMap = await loadCharMap(charIndex, characters, dirHandle);
+      const charMap = await loadCharMap(charIndex, characters, projectRef);
       let blob: Blob;
       let filename = '';
 
-      if (format === 'docx') {
+      if (format === 'pdf') {
+        const html = renderScreenplayHTML(scenes, meta.title, charMap);
+        const printWindow = window.open('', '_blank');
+        if (!printWindow) { setError('팝업이 차단되었습니다. 팝업을 허용해주세요.'); return; }
+        printWindow.document.write(html);
+        printWindow.document.close();
+        printWindow.onload = () => {
+          printWindow.print();
+          printWindow.onafterprint = () => printWindow.close();
+        };
+        return;
+      } else if (format === 'docx') {
         blob = await renderScreenplayDOCX(scenes, meta.title, charMap);
         filename = `${meta.title}.docx`;
       } else {
@@ -95,7 +107,7 @@ export function useExportOps() {
   };
 
   const handleCopyToClipboard = async (scope: 'all' | 'current') => {
-    if (!dirHandle || !meta) return;
+    if (!projectRef || !meta) return;
     setIsExporting(true);
     try {
       const charMap: Record<string, Character> = {};
@@ -107,7 +119,7 @@ export function useExportOps() {
         scenesToUse.push(currentScene);
       } else {
         for (const entry of sceneIndex) {
-          try { scenesToUse.push(await fileIO.readJSON<Scene>(dirHandle, `screenplay/${entry.filename}`)); } catch {/* skip */}
+          try { scenesToUse.push(await fileIO.readJSON<Scene>(projectRef, `screenplay/${entry.filename}`)); } catch {/* skip */}
         }
       }
       const text = buildLLMContextText(scenesToUse, Object.values(charMap), meta.title, meta.logline);

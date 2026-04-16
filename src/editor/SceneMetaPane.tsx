@@ -3,11 +3,17 @@ import type { Scene } from '../types/scene';
 import { STATUS_LABELS, STATUS_BG_BUTTON, STATUS_BG_ACTIVE } from '../utils/statusMapping';
 import type { SceneStatus } from '../types/scene';
 import { useProjectStore } from '../store/projectStore';
+import { useSceneStore } from '../store/sceneStore';
+import { useCharacterStore } from '../store/characterStore';
+import { useStoryStore } from '../store/storyStore';
 import { callAI } from '../ai/aiClient';
+import { SYSTEM_SCENE_SUMMARY, SYSTEM_SCENE_PLAN_MEMO, buildScenePlanMemoPrompt } from '../ai/prompts/sceneMeta';
+import { useAIActivityStore } from '../store/aiActivityStore';
 import { TagInput } from '../components/TagInput';
+import type { ProjectContext } from '../ai/prompts/visualizationGen';
 
 const TONE_OPTIONS = [
-  '희망적', '긴장', '슬픔', '분노', '두려움', '기쁨',
+  '희망적', '긴박한', '슬픔', '분노', '두려움', '기쁨',
   '멜랑꼴리', '우아함', '유머', '극적', '고요함', '혼란',
 ];
 
@@ -24,8 +30,8 @@ function tensionLabel(level: number): string {
   if (level <= 2) return '평온';
   if (level <= 4) return '잔잔';
   if (level <= 6) return '보통';
-  if (level <= 8) return '긴장';
-  return '폭발';
+  if (level <= 8) return '몰입';
+  return '최고조';
 }
 
 export function SceneMetaPane({ scene, onChange, readOnly }: {
@@ -35,11 +41,17 @@ export function SceneMetaPane({ scene, onChange, readOnly }: {
 }) {
   const [expanded, setExpanded] = useState(false);
   const [summaryLoading, setSummaryLoading] = useState(false);
-  const { settings } = useProjectStore();
+  const [planLoading, setPlanLoading] = useState(false);
+  const { settings, meta: projectMeta } = useProjectStore();
+  const { index: sceneIndex } = useSceneStore();
+  const { index: charIndex, characters: charMap } = useCharacterStore();
+  const { threadIndex, threads: threadMap, structure, foreshadowing } = useStoryStore();
+  const aiActivity = useAIActivityStore();
   const { meta } = scene;
 
   const handleAISummary = async () => {
     setSummaryLoading(true);
+    aiActivity.start();
     try {
       const sceneText = scene.blocks
         .map((b) => {
@@ -51,10 +63,30 @@ export function SceneMetaPane({ scene, onChange, readOnly }: {
         .filter(Boolean)
         .join('\n');
 
+      // 이전 씬 요약 + 스레드 컨텍스트 조립
+      const curIdx = sceneIndex.findIndex(s => s.id === scene.id);
+      const prevSummaries = sceneIndex
+        .slice(Math.max(0, curIdx - 3), curIdx)
+        .filter(s => s.summary)
+        .map(s => `[S#${s.number}] ${s.summary}`)
+        .join('\n');
+      const activeThreads = threadIndex
+        .map(t => { const full = threadMap[t.id]; return full?.description ? `- ${t.name}: ${full.description}` : ''; })
+        .filter(Boolean).join('\n');
+      const unresolvedFs = (foreshadowing?.items ?? [])
+        .filter(f => f.status === 'planted')
+        .map(f => `- [${f.importance}] ${f.plantedIn.description}`)
+        .join('\n');
+
+      let contextPrefix = '';
+      if (prevSummaries) contextPrefix += `## 이전 씬 요약\n${prevSummaries}\n\n`;
+      if (activeThreads) contextPrefix += `## 활성 플롯 스레드\n${activeThreads}\n\n`;
+      if (unresolvedFs) contextPrefix += `## 미해결 복선\n${unresolvedFs}\n\n`;
+
       const [summary] = await callAI(
         settings.ai,
-        '당신은 한국 영화 시나리오 전문 편집자입니다. 씬 내용을 읽고 핵심을 2~3줄로 요약하세요. 요약문만 반환하세요.',
-        `씬 헤더: ${scene.header.interior}. ${scene.header.location} - ${scene.header.timeOfDay}\n\n${sceneText}`,
+        SYSTEM_SCENE_SUMMARY,
+        `${contextPrefix}씬 헤더: ${scene.header.interior}. ${scene.header.location} - ${scene.header.timeOfDay}\n\n${sceneText}`,
         1,
       );
       onChange({ meta: { ...meta, summary } });
@@ -62,6 +94,75 @@ export function SceneMetaPane({ scene, onChange, readOnly }: {
       console.error('AI 요약 생성 실패:', err);
     } finally {
       setSummaryLoading(false);
+      aiActivity.stop();
+    }
+  };
+
+  const handleAIPlanMemo = async () => {
+    setPlanLoading(true);
+    aiActivity.start();
+    try {
+      // Gather context
+      const characters: ProjectContext['characters'] = charIndex.map(c => {
+        const full = charMap[c.id];
+        return {
+          name: c.name,
+          description: full?.description,
+          goal: full?.drama?.goal,
+          flaw: full?.drama?.flaw,
+          arc: full?.drama?.arc,
+          traits: full?.personality?.traits,
+        };
+      }).filter(c => c.name);
+
+      const existingThreads = threadIndex
+        .map(t => threadMap[t.id])
+        .filter(Boolean)
+        .map(t => ({ name: t!.name, description: t!.description }));
+
+      const existingForeshadowing = (foreshadowing?.items ?? [])
+        .filter(f => f.status === 'planted')
+        .map(f => ({ description: f.plantedIn.description, status: f.status, importance: f.importance }));
+
+      const ctx: ProjectContext = {
+        meta: projectMeta ? { title: projectMeta.title, logline: projectMeta.logline, genre: projectMeta.genre } : undefined,
+        characters,
+        existingThreads,
+        existingForeshadowing,
+      };
+
+      // Scene position + beat matching
+      const sceneIdx = sceneIndex.findIndex(s => s.id === scene.id);
+      const scenePosition = sceneIdx >= 0 ? { current: sceneIdx + 1, total: sceneIndex.length } : undefined;
+
+      let currentBeat: { name: string; description: string } | undefined;
+      if (scenePosition && structure?.beats?.length) {
+        const relPos = (scenePosition.current - 1) / Math.max(1, scenePosition.total - 1);
+        let closest = structure.beats[0];
+        let minDist = Math.abs((closest.relativePosition ?? 0) - relPos);
+        for (const b of structure.beats) {
+          const d = Math.abs((b.relativePosition ?? 0) - relPos);
+          if (d < minDist) { minDist = d; closest = b; }
+        }
+        if (closest) currentBeat = { name: closest.name, description: closest.description };
+      }
+
+      // Adjacent scene summaries
+      const prevSummaries = sceneIdx > 0
+        ? sceneIndex.slice(Math.max(0, sceneIdx - 3), sceneIdx).map(s => s.summary).filter(Boolean) as string[]
+        : [];
+      const nextSummaries = sceneIdx >= 0
+        ? sceneIndex.slice(sceneIdx + 1, sceneIdx + 3).map(s => s.summary).filter(Boolean) as string[]
+        : [];
+
+      const userPrompt = buildScenePlanMemoPrompt(ctx, scenePosition, currentBeat, prevSummaries, nextSummaries);
+      const [memo] = await callAI(settings.ai, SYSTEM_SCENE_PLAN_MEMO, userPrompt, 1);
+      onChange({ meta: { ...meta, summary: memo } });
+    } catch (err) {
+      console.error('AI 계획 메모 생성 실패:', err);
+    } finally {
+      setPlanLoading(false);
+      aiActivity.stop();
     }
   };
 
@@ -73,10 +174,10 @@ export function SceneMetaPane({ scene, onChange, readOnly }: {
   };
 
   return (
-    <div className="border-t border-gray-800 bg-gray-950 flex-shrink-0">
+    <div className="border-t border-gray-200 bg-white flex-shrink-0">
       <button
         onClick={() => setExpanded(!expanded)}
-        className="w-full flex items-center gap-3 px-4 py-1.5 text-xs text-gray-600 hover:text-gray-400 transition-colors"
+        className="w-full flex items-center gap-3 px-4 py-1.5 text-xs text-gray-400 hover:text-gray-600 transition-colors"
       >
         {meta.status && (
           <span className={`px-1.5 py-0.5 rounded-full text-white font-medium ${STATUS_BG_BUTTON[meta.status]}`}>
@@ -84,21 +185,21 @@ export function SceneMetaPane({ scene, onChange, readOnly }: {
           </span>
         )}
         <span className={`font-mono font-bold ${tensionColor(meta.tensionLevel ?? 5)}`}>
-          긴장 {meta.tensionLevel ?? 5}/10
+          몰입도 {meta.tensionLevel ?? 5}/10
         </span>
         {meta.emotionalTone?.length ? (
-          <span className="text-gray-600">{meta.emotionalTone.slice(0, 3).join(' · ')}</span>
+          <span className="text-gray-500">{meta.emotionalTone.slice(0, 3).join(' · ')}</span>
         ) : null}
         {meta.summary ? (
-          <span className="flex-1 truncate text-left">{meta.summary}</span>
+          <span className="flex-1 truncate text-left text-gray-600">{meta.summary}</span>
         ) : (
-          <span className="flex-1 text-gray-800 italic">씬 메모 없음</span>
+          <span className="flex-1 text-gray-300 italic">씬 메모 없음</span>
         )}
-        <span>{expanded ? '▲' : '▼'}</span>
+        <span className="text-gray-400">{expanded ? '▲' : '▼'}</span>
       </button>
 
       {expanded && (
-        <div className="px-4 py-3 space-y-3 border-t border-gray-800/50">
+        <div className="px-4 py-3 space-y-3 border-t border-gray-100">
           <div>
             <label className="text-xs text-gray-500 block mb-1">작성 상태</label>
             <div className="flex gap-1">
@@ -109,7 +210,7 @@ export function SceneMetaPane({ scene, onChange, readOnly }: {
                   className={`text-xs px-2 py-0.5 rounded-full transition-colors ${
                     meta.status === s
                       ? `${STATUS_BG_ACTIVE[s]} text-white`
-                      : 'bg-gray-800 text-gray-500 hover:text-gray-300'
+                      : 'bg-gray-100 text-gray-500 hover:text-gray-700 hover:bg-gray-200'
                   }`}
                 >
                   {STATUS_LABELS[s]}
@@ -122,14 +223,24 @@ export function SceneMetaPane({ scene, onChange, readOnly }: {
             <div className="flex items-center justify-between mb-1">
               <label className="text-xs text-gray-500">씬 요약 / 메모</label>
               {!readOnly && settings.ai.apiKey && (
-                <button
-                  onClick={handleAISummary}
-                  disabled={summaryLoading}
-                  title="AI로 씬 요약 자동 생성"
-                  className="text-xs px-2 py-0.5 rounded bg-gray-800 text-gray-500 hover:text-red-400 hover:bg-gray-700 transition-colors disabled:opacity-40"
-                >
-                  {summaryLoading ? '생성 중...' : '✦ AI 요약'}
-                </button>
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={handleAIPlanMemo}
+                    disabled={planLoading || summaryLoading}
+                    title="스토리 컨텍스트 기반으로 씬 계획 메모 생성"
+                    className="text-xs px-2 py-0.5 rounded bg-violet-50 text-violet-500 hover:text-violet-700 hover:bg-violet-100 transition-colors disabled:opacity-40"
+                  >
+                    {planLoading ? '생성 중...' : '✦ AI 계획'}
+                  </button>
+                  <button
+                    onClick={handleAISummary}
+                    disabled={summaryLoading || planLoading}
+                    title="기존 씬 내용을 읽고 요약 생성"
+                    className="text-xs px-2 py-0.5 rounded bg-gray-100 text-gray-500 hover:text-blue-500 hover:bg-blue-50 transition-colors disabled:opacity-40"
+                  >
+                    {summaryLoading ? '생성 중...' : '✦ AI 요약'}
+                  </button>
+                </div>
               )}
             </div>
             <textarea
@@ -138,14 +249,14 @@ export function SceneMetaPane({ scene, onChange, readOnly }: {
               readOnly={readOnly}
               rows={2}
               placeholder="이 씬에서 일어나는 일을 요약하세요..."
-              className="w-full bg-gray-900 border border-gray-700 rounded px-3 py-2 text-xs text-gray-300 focus:outline-none focus:border-gray-500 resize-none placeholder-gray-700"
+              className="w-full bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-xs text-gray-700 focus:outline-none focus:border-blue-300 focus:ring-1 focus:ring-blue-100 resize-none placeholder-gray-400"
             />
           </div>
 
           <div className="flex items-center gap-6">
             <div className="flex-1">
               <label className={`text-xs font-medium mb-1 flex items-center gap-2 ${tensionColor(meta.tensionLevel ?? 5)}`}>
-                긴장도
+                몰입도
                 <span className="font-bold">{meta.tensionLevel ?? 5}</span>
                 <span className="text-gray-600 font-normal">({tensionLabel(meta.tensionLevel ?? 5)})</span>
               </label>
@@ -154,7 +265,7 @@ export function SceneMetaPane({ scene, onChange, readOnly }: {
                 value={meta.tensionLevel ?? 5}
                 onChange={(e) => !readOnly && onChange({ meta: { ...meta, tensionLevel: Number(e.target.value) } })}
                 disabled={readOnly}
-                className="w-full accent-red-500 cursor-pointer"
+                className="w-full accent-blue-500 cursor-pointer"
               />
             </div>
             <div>
@@ -165,9 +276,9 @@ export function SceneMetaPane({ scene, onChange, readOnly }: {
                   value={meta.estimatedMinutes ?? 1}
                   onChange={(e) => !readOnly && onChange({ meta: { ...meta, estimatedMinutes: Number(e.target.value) } })}
                   readOnly={readOnly}
-                  className="w-16 bg-gray-900 border border-gray-700 rounded px-2 py-1 text-xs text-gray-300 focus:outline-none text-center"
+                  className="w-16 bg-gray-50 border border-gray-200 rounded-lg px-2 py-1 text-xs text-gray-700 focus:outline-none focus:border-blue-300 text-center"
                 />
-                <span className="text-xs text-gray-600">분</span>
+                <span className="text-xs text-gray-400">분</span>
               </div>
             </div>
           </div>
@@ -184,8 +295,8 @@ export function SceneMetaPane({ scene, onChange, readOnly }: {
                     disabled={readOnly}
                     className={`text-xs px-2 py-0.5 rounded-full border transition-colors ${
                       active
-                        ? 'border-red-600 bg-red-900/30 text-red-300'
-                        : 'border-gray-700 text-gray-600 hover:border-gray-500 hover:text-gray-400'
+                        ? 'border-blue-400 bg-blue-50 text-blue-600'
+                        : 'border-gray-200 text-gray-500 hover:border-gray-300 hover:text-gray-700'
                     }`}
                   >
                     {tone}

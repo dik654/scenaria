@@ -26,9 +26,9 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const colorMap: Record<ToastType, string> = {
-    success: 'bg-green-800 border-green-600 text-green-100',
-    error: 'bg-red-900 border-red-700 text-red-100',
-    info: 'bg-gray-800 border-gray-600 text-gray-100',
+    success: 'bg-green-50 border-green-200 text-green-700',
+    error: 'bg-red-50 border-red-200 text-red-700',
+    info: 'bg-white border-zinc-200 text-zinc-700',
   };
 
   return (

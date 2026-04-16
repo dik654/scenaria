@@ -70,9 +70,9 @@ export function SceneDashboard() {
       {/* INT/EXT */}
       <Section title="씬 유형">
         <BarChart data={[
-          { label: 'INT', value: intScenes, max: scenes.length, color: '#4F46E5' },
-          { label: 'EXT', value: extScenes, max: scenes.length, color: '#059669' },
-          { label: 'INT/EXT', value: scenes.length - intScenes - extScenes, max: scenes.length, color: '#D97706' },
+          { label: '실내', value: intScenes, max: scenes.length, color: '#4F46E5' },
+          { label: '실외', value: extScenes, max: scenes.length, color: '#059669' },
+          { label: '실내/실외', value: scenes.length - intScenes - extScenes, max: scenes.length, color: '#D97706' },
         ]} />
       </Section>
 
@@ -99,8 +99,8 @@ export function SceneDashboard() {
                     {actCounts[i]}씬 ({actual}%)
                   </span>
                 </div>
-                <div className="relative h-2 bg-gray-800 rounded-full overflow-hidden">
-                  <div className="absolute h-full bg-red-700 rounded-full" style={{ width: `${actual}%` }} />
+                <div className="relative h-2 bg-gray-100 rounded-full overflow-hidden">
+                  <div className="absolute h-full bg-blue-500 rounded-full" style={{ width: `${actual}%` }} />
                   <div className="absolute h-full border-r-2 border-dashed border-gray-500" style={{ left: `${ideal}%` }} />
                 </div>
               </div>
@@ -114,7 +114,7 @@ export function SceneDashboard() {
       <Section title="작성 진행도">
         <div className="space-y-1.5">
           {/* Progress bar */}
-          <div className="flex h-3 rounded-full overflow-hidden bg-gray-800">
+          <div className="flex h-3 rounded-full overflow-hidden bg-gray-100">
             {STATUS_DISPLAY.map(({ key, label, color }) =>
               statusCounts[key] > 0 ? (
                 <div
@@ -158,13 +158,13 @@ export function SceneDashboard() {
           <div className="space-y-1">
             {issueScenes > 0 && (
               <div className="flex items-center gap-2 text-xs text-red-400">
-                <span>🔴</span>
+                <span className="w-2 h-2 rounded-full bg-red-500 inline-block" />
                 <span>{issueScenes}개 씬에 정합성 이슈</span>
               </div>
             )}
             {foreshadowScenes > 0 && (
               <div className="flex items-center gap-2 text-xs text-yellow-400">
-                <span>🟡</span>
+                <span className="w-2 h-2 rounded-full bg-yellow-500 inline-block" />
                 <span>{foreshadowScenes}개 씬에 미회수 복선</span>
               </div>
             )}
@@ -177,10 +177,10 @@ export function SceneDashboard() {
 
 function StatCard({ label, value, unit }: { label: string; value: number; unit: string }) {
   return (
-    <div className="bg-gray-900 border border-gray-800 rounded-xl p-3">
+    <div className="bg-white border border-gray-200 rounded-xl p-3">
       <p className="text-xs text-gray-500 mb-1">{label}</p>
       <div className="flex items-baseline gap-1">
-        <span className="text-2xl font-bold text-white">{value}</span>
+        <span className="text-2xl font-bold text-gray-800">{value}</span>
         <span className="text-xs text-gray-500">{unit}</span>
       </div>
     </div>
@@ -202,7 +202,7 @@ function BarChart({ data }: { data: { label: string; value: number; max: number;
       {data.map(({ label, value, max, color }) => (
         <div key={label} className="flex items-center gap-2">
           <span className="text-xs text-gray-500 w-16 truncate flex-shrink-0">{label}</span>
-          <div className="flex-1 h-2 bg-gray-800 rounded-full overflow-hidden">
+          <div className="flex-1 h-2 bg-gray-100 rounded-full overflow-hidden">
             <div
               className="h-full rounded-full transition-all duration-300"
               style={{ width: `${max > 0 ? (value / max) * 100 : 0}%`, backgroundColor: color }}

@@ -7,10 +7,10 @@ import { nextSceneId, renumberScenes } from '../../utils/sceneNumbering';
 import { sceneFilename } from '../../utils/fileNaming';
 
 export function useSplitScene(currentScene: Scene | null, selectedBlockIndex: number | null) {
-  const { dirHandle } = useProjectStore();
+  const { projectRef } = useProjectStore();
 
   const splitScene = useCallback(async () => {
-    if (!currentScene || !dirHandle || selectedBlockIndex === null || selectedBlockIndex === 0) return;
+    if (!currentScene || !projectRef || selectedBlockIndex === null || selectedBlockIndex === 0) return;
     const state = useSceneStore.getState();
     const entry = state.index.find((s) => s.id === currentScene.id);
     if (!entry) return;
@@ -33,20 +33,20 @@ export function useSplitScene(currentScene: Scene | null, selectedBlockIndex: nu
     const sceneA: Scene = { ...currentScene, blocks: blocksA, characters: extractChars(blocksA) };
     const newFilename = sceneFilename(newId, newScene.header.location);
 
-    await fileIO.writeJSON(dirHandle, `screenplay/${entry.filename}`, sceneA);
-    await fileIO.writeJSON(dirHandle, `screenplay/${newFilename}`, newScene);
+    await fileIO.writeJSON(projectRef, `screenplay/${entry.filename}`, sceneA);
+    await fileIO.writeJSON(projectRef, `screenplay/${newFilename}`, newScene);
 
     const insertAt = currentIndex.findIndex((s) => s.id === currentScene.id) + 1;
     const newEntry = { ...entry, id: newId, filename: newFilename, characterCount: newScene.characters.length };
     const renumbered = renumberScenes([...currentIndex.slice(0, insertAt), newEntry, ...currentIndex.slice(insertAt)]);
-    await fileIO.writeJSON(dirHandle, 'screenplay/_index.json', { scenes: renumbered });
+    await fileIO.writeJSON(projectRef, 'screenplay/_index.json', { scenes: renumbered });
 
     state.updateCurrentScene(sceneA);
     state.markClean();
     state.updateIndexEntry(currentScene.id, { characterCount: sceneA.characters.length });
     state.setIndex(renumbered);
     state.setCurrentScene(newId, newScene);
-  }, [currentScene, dirHandle, selectedBlockIndex]);
+  }, [currentScene, projectRef, selectedBlockIndex]);
 
   return { splitScene };
 }

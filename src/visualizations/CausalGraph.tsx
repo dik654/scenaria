@@ -34,27 +34,27 @@ export function CausalGraph({ onSceneClick }: { onSceneClick?: (id: string) => v
   const svgRef = useRef<SVGSVGElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const { index: scenes } = useSceneStore();
-  const { dirHandle } = useProjectStore();
+  const { projectRef } = useProjectStore();
   const [links, setLinks] = useState<CausalLink[]>([]);
   const [editMode, setEditMode] = useState(false);
   const [pendingFrom, setPendingFrom] = useState<string | null>(null);
 
   const load = useCallback(async () => {
-    if (!dirHandle) return;
+    if (!projectRef) return;
     try {
-      const data = await fileIO.readJSON<CausalLinkStore>(dirHandle, 'story/causal_links.json');
+      const data = await fileIO.readJSON<CausalLinkStore>(projectRef, 'story/causal_links.json');
       setLinks(data?.links ?? []);
     } catch {
       setLinks([]);
     }
-  }, [dirHandle]);
+  }, [projectRef]);
 
   const save = useCallback(async (newLinks: CausalLink[]) => {
-    if (!dirHandle) return;
+    if (!projectRef) return;
     try {
-      await fileIO.writeJSON(dirHandle, 'story/causal_links.json', { links: newLinks });
+      await fileIO.writeJSON(projectRef, 'story/causal_links.json', { links: newLinks });
     } catch { /* ignore */ }
-  }, [dirHandle]);
+  }, [projectRef]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -178,7 +178,7 @@ export function CausalGraph({ onSceneClick }: { onSceneClick?: (id: string) => v
       .attr('dy', '0.35em')
       .attr('font-size', 10)
       .attr('fill', '#eee')
-      .text(d => `S#${d.number}`);
+      .text(d => `장면 ${d.number}`);
 
     node.append('text')
       .attr('text-anchor', 'middle')
@@ -187,7 +187,7 @@ export function CausalGraph({ onSceneClick }: { onSceneClick?: (id: string) => v
       .attr('fill', '#888')
       .text(d => d.location.length > 8 ? d.location.slice(0, 8) + '…' : d.location);
 
-    node.append('title').text(d => `S#${d.number}. ${d.location}`);
+    node.append('title').text(d => `장면 ${d.number}. ${d.location}`);
 
     simulation.on('tick', () => {
       link
@@ -225,7 +225,7 @@ export function CausalGraph({ onSceneClick }: { onSceneClick?: (id: string) => v
       <div className="absolute top-2 left-2 flex items-center gap-2">
         <button
           onClick={() => { setEditMode(e => !e); setPendingFrom(null); }}
-          className={`px-2 py-1 text-xs rounded ${editMode ? 'bg-red-700 text-white' : 'bg-gray-800 text-gray-400 hover:text-white'}`}
+          className={`px-2 py-1 text-xs rounded ${editMode ? 'bg-blue-500 text-white' : 'bg-gray-100 text-gray-600 hover:text-gray-800'}`}
         >
           {editMode ? (pendingFrom ? '→ 대상 클릭' : '출발 클릭') : '링크 편집'}
         </button>

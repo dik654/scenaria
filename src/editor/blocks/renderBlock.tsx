@@ -33,7 +33,7 @@ export function createEmptyBlock(type: SceneBlock['type']): SceneBlock {
     case 'character':     return { type: 'character', characterId: '', voiceType: 'normal' };
     case 'dialogue':      return { type: 'dialogue', text: '' };
     case 'parenthetical': return { type: 'parenthetical', text: '' };
-    case 'transition':    return { type: 'transition', transitionType: 'CUT TO:' };
+    case 'transition':    return { type: 'transition', transitionType: '컷' };
   }
 }
 

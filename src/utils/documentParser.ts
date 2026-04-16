@@ -75,8 +75,8 @@ export function parsePlainTextToScene(text: string, sceneId: string): Partial<Sc
     if (!trimmed) continue;
 
     // Transition (right-aligned keywords)
-    if (/^(CUT TO|FADE|DISSOLVE|SMASH CUT|MATCH CUT)/i.test(trimmed)) {
-      const block: TransitionBlock = { type: 'transition', transitionType: trimmed.toUpperCase() };
+    if (/^(컷|F\.?O\.?|F\.?I\.?|O\.?L\.?|암전|점프\s*컷|매치\s*컷|CUT TO|FADE|DISSOLVE|SMASH CUT|MATCH CUT)/i.test(trimmed)) {
+      const block: TransitionBlock = { type: 'transition', transitionType: trimmed };
       blocks.push(block);
       continue;
     }
@@ -155,7 +155,7 @@ export function parseFountainToScenes(text: string): Partial<Scene>[] {
 
   const sceneHeadingRE = /^(INT|EXT|INT\.?\/EXT|I\/E)[\s.]/i;
   const forceHeadingRE = /^\./;
-  const transitionRE = /^(FADE OUT\.?|FADE IN:|FADE TO|CUT TO:|SMASH CUT|MATCH CUT|DISSOLVE TO:?|THE END)$/i;
+  const transitionRE = /^(컷|F\.?O\.?|F\.?I\.?|O\.?L\.?|암전|점프\s*컷|매치\s*컷|FADE OUT\.?|FADE IN:|FADE TO|CUT TO:|SMASH CUT|MATCH CUT|DISSOLVE TO:?|THE END)$/i;
   // Latin names: all-caps word(s). Korean names: pure Hangul syllables only (no dots/particles).
   const charNameRE = /^[A-Z가-힣][A-Z가-힣\s\-'']*(\s+\(.*\))?$/;
   const koreanNameRE = /^[가-힣]+(\s+[가-힣]+)?$/;

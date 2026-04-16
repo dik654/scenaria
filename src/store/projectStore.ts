@@ -2,9 +2,11 @@ import { create } from 'zustand';
 import type { ProjectMeta, AppSettings } from '../types/project';
 import type { HistoryManager } from '../io/history/historyManager';
 import type { AutoSave } from '../io/history/autoSave';
+import type { ProjectRef } from '../io/types';
+import { fileIO } from '../io';
 
 interface ProjectState {
-  dirHandle: FileSystemDirectoryHandle | null;
+  projectRef: ProjectRef | null;
   meta: ProjectMeta | null;
   settings: AppSettings;
   historyManager: HistoryManager | null;
@@ -12,8 +14,9 @@ interface ProjectState {
   isLoading: boolean;
   error: string | null;
 
-  setProject: (dirHandle: FileSystemDirectoryHandle, meta: ProjectMeta) => void;
+  setProject: (ref: ProjectRef, meta: ProjectMeta) => void;
   setSettings: (settings: Partial<AppSettings>) => void;
+  persistSettings: () => Promise<void>;
   setHistoryManager: (hm: HistoryManager) => void;
   setAutoSave: (as: AutoSave) => void;
   clearProject: () => void;
@@ -22,7 +25,7 @@ interface ProjectState {
 }
 
 const DEFAULT_SETTINGS: AppSettings = {
-  theme: 'dark',
+  theme: 'light',
   editorFont: 'monospace',
   editorFontSize: 14,
   lineHeight: 1.8,
@@ -32,6 +35,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   autosaveInterval: 2000,
   ai: {
     provider: 'claude',
+    autoAnalysis: true,
   },
   shortcuts: {},
   quickActions: [
@@ -45,8 +49,8 @@ const DEFAULT_SETTINGS: AppSettings = {
   ],
 };
 
-export const useProjectStore = create<ProjectState>((set) => ({
-  dirHandle: null,
+export const useProjectStore = create<ProjectState>((set, get) => ({
+  projectRef: null,
   meta: null,
   settings: DEFAULT_SETTINGS,
   historyManager: null,
@@ -54,13 +58,25 @@ export const useProjectStore = create<ProjectState>((set) => ({
   isLoading: false,
   error: null,
 
-  setProject: (dirHandle, meta) => set({ dirHandle, meta, error: null }),
+  setProject: (ref, meta) => set({ projectRef: ref, meta, error: null }),
   setSettings: (settings) =>
     set((state) => ({ settings: { ...state.settings, ...settings } })),
+  persistSettings: async () => {
+    const { projectRef, settings } = get();
+    if (!projectRef) return;
+    const { ai, ...rest } = settings;
+    const safeAi = { ...ai };
+    delete (safeAi as Record<string, unknown>).apiKey;
+    try {
+      await fileIO.writeJSON(projectRef, 'settings.json', { ...rest, ai: safeAi });
+    } catch (err) {
+      console.error('설정 저장 실패:', err);
+    }
+  },
   setHistoryManager: (hm) => set({ historyManager: hm }),
   setAutoSave: (as) => set({ autoSave: as }),
   clearProject: () =>
-    set({ dirHandle: null, meta: null, historyManager: null, autoSave: null }),
+    set({ projectRef: null, meta: null, historyManager: null, autoSave: null }),
   setError: (error) => set({ error }),
   setLoading: (isLoading) => set({ isLoading }),
 }));

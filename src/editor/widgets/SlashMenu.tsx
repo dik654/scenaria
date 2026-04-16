@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
+import type { ReactNode } from 'react';
+import { FileText, User, MessageSquare, ArrowRightLeft, Clapperboard, Link, Target } from 'lucide-react';
 import type { SceneBlock } from '../../types/scene';
 
 interface SlashMenuItem {
@@ -7,18 +9,18 @@ interface SlashMenuItem {
   shortcut: string;
   description: string;
   blockType: SceneBlock['type'] | 'scene' | 'foreshadowing' | 'payoff';
-  icon: string;
+  icon: ReactNode;
 }
 
 const ITEMS: SlashMenuItem[] = [
-  { id: 'action',       label: '지문',      shortcut: '/ㅈ',   description: '씬 행동/묘사',        blockType: 'action',        icon: '📝' },
-  { id: 'character',    label: '캐릭터명',   shortcut: '/ㅋ',   description: '캐릭터 이름',          blockType: 'character',     icon: '👤' },
-  { id: 'dialogue',     label: '대사',      shortcut: '/ㄷ',   description: '캐릭터 대사',          blockType: 'dialogue',      icon: '💬' },
-  { id: 'parenthetical',label: '지시문',    shortcut: '/ㅅ',   description: '(연기 지시)',          blockType: 'parenthetical', icon: '()' },
-  { id: 'transition',   label: '전환',      shortcut: '/전환', description: 'CUT TO / FADE 등',   blockType: 'transition',    icon: '→' },
-  { id: 'scene',        label: '새 씬',     shortcut: '/씬',   description: '씬 헤더 추가',         blockType: 'scene',         icon: '🎬' },
-  { id: 'foreshadow',   label: '복선 마커', shortcut: '/복선', description: '복선(떡밥) 마커 삽입', blockType: 'foreshadowing', icon: '🔗' },
-  { id: 'payoff',       label: '회수 마커', shortcut: '/회수', description: '복선 회수 마커 연결',  blockType: 'payoff',        icon: '🎯' },
+  { id: 'action',        label: '지문',      shortcut: '/ㅈ',   description: '씬 행동/묘사',        blockType: 'action',        icon: <FileText className="w-4 h-4" /> },
+  { id: 'character',     label: '캐릭터명',   shortcut: '/ㅋ',   description: '캐릭터 이름',          blockType: 'character',     icon: <User className="w-4 h-4" /> },
+  { id: 'dialogue',      label: '대사',      shortcut: '/ㄷ',   description: '캐릭터 대사',          blockType: 'dialogue',      icon: <MessageSquare className="w-4 h-4" /> },
+  { id: 'parenthetical', label: '지시문',    shortcut: '/ㅅ',   description: '(연기 지시)',          blockType: 'parenthetical', icon: '()' },
+  { id: 'transition',    label: '전환',      shortcut: '/전환', description: '컷 / F.O. / O.L. 등',   blockType: 'transition',    icon: <ArrowRightLeft className="w-4 h-4" /> },
+  { id: 'scene',         label: '새 씬',     shortcut: '/씬',   description: '씬 헤더 추가',         blockType: 'scene',         icon: <Clapperboard className="w-4 h-4" /> },
+  { id: 'foreshadow',    label: '복선 마커', shortcut: '/복선', description: '복선(떡밥) 마커 삽입', blockType: 'foreshadowing', icon: <Link className="w-4 h-4" /> },
+  { id: 'payoff',        label: '회수 마커', shortcut: '/회수', description: '복선 회수 마커 연결',  blockType: 'payoff',        icon: <Target className="w-4 h-4" /> },
 ];
 
 interface SlashMenuProps {
@@ -77,10 +79,10 @@ export function SlashMenu({ anchorEl, query, onSelect, onClose }: SlashMenuProps
         zIndex: 1000,
         width: 260,
       }}
-      className="bg-gray-900 border border-gray-700 rounded-xl shadow-2xl overflow-hidden"
+      className="bg-white border border-gray-200 rounded-xl shadow-lg overflow-hidden"
     >
       {query && (
-        <div className="px-3 py-1.5 border-b border-gray-800 text-xs text-gray-500 font-mono">
+        <div className="px-3 py-1.5 border-b border-gray-100 text-xs text-gray-500 font-mono">
           /{query}
         </div>
       )}
@@ -90,13 +92,13 @@ export function SlashMenu({ anchorEl, query, onSelect, onClose }: SlashMenuProps
           onClick={() => onSelect(item)}
           onMouseEnter={() => setSelectedIndex(i)}
           className={`w-full flex items-center gap-3 px-3 py-2 text-left transition-colors ${
-            i === selectedIndex ? 'bg-gray-700' : 'hover:bg-gray-800'
+            i === selectedIndex ? 'bg-blue-50' : 'hover:bg-gray-50'
           }`}
         >
           <span className="text-base w-6 text-center">{item.icon}</span>
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2">
-              <span className="text-sm text-white font-medium">{item.label}</span>
+              <span className="text-sm text-gray-800 font-medium">{item.label}</span>
               <span className="text-xs text-gray-600 font-mono">{item.shortcut}</span>
             </div>
             <p className="text-xs text-gray-500 truncate">{item.description}</p>

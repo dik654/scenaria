@@ -1,5 +1,7 @@
+import type { ReactNode } from 'react';
+
 export function ToolbarButton({ icon, label, onClick, hasArrow }: {
-  icon: string;
+  icon: ReactNode;
   label: string;
   onClick: () => void;
   hasArrow?: boolean;

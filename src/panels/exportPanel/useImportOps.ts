@@ -3,14 +3,15 @@ import { useSceneStore } from '../../store/sceneStore';
 import { useProjectStore } from '../../store/projectStore';
 import { fileIO } from '../../io';
 import type { Scene, SceneIndexEntry } from '../../types/scene';
-import { parseFountainToScenes } from '../../utils/documentParser';
+import { parseFountainToScenes, parsePlainTextToScene } from '../../utils/documentParser';
+import { extractTextFromDocx } from '../../utils/docxImporter';
 import { nextSceneId, renumberScenes } from '../../utils/sceneNumbering';
 import { sceneFilename } from '../../utils/fileNaming';
 import { useToast } from '../../components/Toast';
 
 export function useImportOps(onDone: () => void) {
   const { index: sceneIndex, addSceneToIndex, setIndex, setCurrentScene } = useSceneStore();
-  const { dirHandle, meta } = useProjectStore();
+  const { projectRef, meta } = useProjectStore();
   const toast = useToast();
   const [importPreview, setImportPreview] = useState<{ count: number; titles: string[] } | null>(null);
   const [importData, setImportData] = useState<Partial<Scene>[] | null>(null);
@@ -21,10 +22,27 @@ export function useImportOps(onDone: () => void) {
     const file = e.target.files?.[0];
     if (!file) return;
     try {
-      const text = await file.text();
-      const scenes = parseFountainToScenes(text);
+      const isDocx = file.name.toLowerCase().endsWith('.docx');
+      const text = isDocx ? await extractTextFromDocx(file) : await file.text();
+      const isFountain = file.name.toLowerCase().endsWith('.fountain');
+
+      let scenes: Partial<Scene>[];
+      if (isFountain) {
+        scenes = parseFountainToScenes(text);
+      } else {
+        // Plain text or DOCX: split by scene headings or treat as single scene
+        scenes = parseFountainToScenes(text);
+        if (scenes.length === 0) {
+          // Fallback: treat entire text as one scene
+          const single = parsePlainTextToScene(text, 's001');
+          if (single.blocks && single.blocks.length > 0) {
+            scenes = [single];
+          }
+        }
+      }
+
       if (scenes.length === 0) {
-        setError('씬을 찾지 못했습니다. Fountain 형식(.fountain)인지 확인하세요.');
+        setError('씬을 찾지 못했습니다. 파일 내용을 확인하세요.');
         return;
       }
       setImportData(scenes);
@@ -39,7 +57,7 @@ export function useImportOps(onDone: () => void) {
   };
 
   const handleImport = async (resetFileInput: () => void) => {
-    if (!dirHandle || !importData || !meta) return;
+    if (!projectRef || !importData || !meta) return;
     setIsImporting(true);
     setError(null);
     try {
@@ -57,7 +75,7 @@ export function useImportOps(onDone: () => void) {
           characters: partial.characters ?? [],
         };
         const filename = sceneFilename(id, scene.header.location);
-        await fileIO.writeJSON(dirHandle, `screenplay/${filename}`, scene);
+        await fileIO.writeJSON(projectRef, `screenplay/${filename}`, scene);
         newEntries.push({
           id, filename,
           number: startNumber + i,
@@ -69,10 +87,10 @@ export function useImportOps(onDone: () => void) {
         });
       }
       const newIndex = [...sceneIndex, ...newEntries];
-      await fileIO.writeJSON(dirHandle, 'screenplay/_index.json', { scenes: newIndex });
+      await fileIO.writeJSON(projectRef, 'screenplay/_index.json', { scenes: newIndex });
       setIndex(newIndex);
       if (newEntries[0]) {
-        const first = await fileIO.readJSON<Scene>(dirHandle, `screenplay/${newEntries[0].filename}`);
+        const first = await fileIO.readJSON<Scene>(projectRef, `screenplay/${newEntries[0].filename}`);
         setCurrentScene(newEntries[0].id, first);
       }
       setImportData(null);

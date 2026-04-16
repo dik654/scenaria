@@ -81,11 +81,11 @@ export function BranchDialog({ onClose }: Props) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
-      <div className="bg-gray-900 border border-gray-700 rounded-xl shadow-2xl w-96 mx-4">
+      <div className="bg-white border border-gray-200 rounded-xl shadow-lg w-96 mx-4">
         {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-800">
-          <h2 className="text-sm font-semibold text-gray-100">갈래 관리</h2>
-          <button onClick={onClose} className="text-gray-500 hover:text-gray-300 text-lg leading-none">×</button>
+        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+          <h2 className="text-sm font-semibold text-gray-800">갈래 관리</h2>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-lg leading-none">×</button>
         </div>
 
         {/* Branch list */}
@@ -97,16 +97,16 @@ export function BranchDialog({ onClose }: Props) {
               key={b.name}
               className={`flex items-center justify-between px-3 py-2 rounded-lg border ${
                 b.name === currentBranch
-                  ? 'border-red-700 bg-red-900/20'
-                  : 'border-gray-700 bg-gray-800/40'
+                  ? 'border-blue-300 bg-blue-50'
+                  : 'border-gray-200 bg-gray-50'
               }`}
             >
               <div className="flex items-center gap-2">
-                <span className={`text-xs font-mono ${b.name === currentBranch ? 'text-red-400' : 'text-gray-300'}`}>
+                <span className={`text-xs font-mono ${b.name === currentBranch ? 'text-blue-600' : 'text-gray-600'}`}>
                   {b.name === currentBranch ? '▶ ' : '  '}{b.name}
                 </span>
                 {b.name === currentBranch && (
-                  <span className="text-xs text-gray-600 bg-gray-800 rounded px-1">현재</span>
+                  <span className="text-xs text-blue-500 bg-blue-50 rounded px-1">현재</span>
                 )}
               </div>
               <div className="flex gap-2">
@@ -133,7 +133,7 @@ export function BranchDialog({ onClose }: Props) {
         </div>
 
         {/* Create new branch */}
-        <div className="px-5 py-4 border-t border-gray-800">
+        <div className="px-5 py-4 border-t border-gray-100">
           <p className="text-xs text-gray-500 mb-2">새 갈래 만들기</p>
           <div className="flex gap-2">
             <input
@@ -142,12 +142,12 @@ export function BranchDialog({ onClose }: Props) {
               onChange={e => setNewName(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && handleCreate()}
               placeholder="갈래 이름"
-              className="flex-1 bg-gray-800 border border-gray-600 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-red-500"
+              className="flex-1 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 placeholder-gray-400 focus:outline-none focus:border-blue-400"
             />
             <button
               onClick={handleCreate}
               disabled={!newName.trim() || isCreating}
-              className="px-4 py-2 text-sm rounded-lg bg-red-700 hover:bg-red-600 text-white disabled:opacity-40"
+              className="px-4 py-2 text-sm rounded-lg bg-blue-500 hover:bg-blue-600 text-white disabled:opacity-40"
             >
               {isCreating ? '…' : '만들기'}
             </button>

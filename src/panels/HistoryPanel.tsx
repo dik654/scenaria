@@ -103,8 +103,8 @@ export function HistoryPanel() {
       )}
 
       {/* Header */}
-      <div className="flex items-center justify-between px-3 py-2 border-b border-gray-800">
-        <span className="text-xs font-medium text-gray-400 uppercase tracking-wider">내역</span>
+      <div className="flex items-center justify-between px-3 py-2 border-b border-gray-100">
+        <span className="text-xs font-medium text-gray-500 uppercase tracking-wider">내역</span>
         <div className="flex gap-1">
           <button
             onClick={() => setShowBranchDialog(true)}
@@ -137,7 +137,7 @@ export function HistoryPanel() {
         ) : savePoints.length === 0 ? (
           <div className="text-center py-8 text-xs text-gray-600">저장 지점 없음</div>
         ) : (
-          <div className="divide-y divide-gray-800/50">
+          <div className="divide-y divide-gray-100">
             {savePoints.map((sp, i) => {
               const milestone = getMilestoneForSave(sp.id);
               const isCurrent = i === 0;
@@ -146,15 +146,15 @@ export function HistoryPanel() {
                 <div key={sp.id} className="group">
                   {/* Milestone marker */}
                   {milestone && (
-                    <div className="px-3 py-1 bg-yellow-900/20 border-l-2 border-yellow-500 flex items-center gap-2">
-                      <span className="text-yellow-400 text-xs">★</span>
-                      <span className="text-xs font-medium text-yellow-300">{milestone.name}</span>
+                    <div className="px-3 py-1 bg-amber-50 border-l-2 border-amber-400 flex items-center gap-2">
+                      <span className="text-amber-500 text-xs">★</span>
+                      <span className="text-xs font-medium text-amber-700">{milestone.name}</span>
                     </div>
                   )}
 
-                  <div className={`px-3 py-2 ${isCurrent ? 'bg-gray-800/30' : ''}`}>
+                  <div className={`px-3 py-2 ${isCurrent ? 'bg-blue-50/50' : ''}`}>
                     <div className="flex items-center gap-2 mb-1">
-                      <span className={`text-xs ${sp.auto ? 'text-gray-600' : 'text-gray-300'}`}>
+                      <span className={`text-xs ${sp.auto ? 'text-gray-400' : 'text-gray-600'}`}>
                         {sp.auto ? '○' : '●'}
                       </span>
                       <span className="text-xs text-gray-400 flex-1 truncate">{sp.memo}</span>

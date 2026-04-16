@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useProjectStore } from '../store/projectStore';
 import type { SavePoint } from '../io/history/types';
+import { File } from 'lucide-react';
 
 interface RestoreDialogProps {
   savePoint: SavePoint;
@@ -34,13 +35,13 @@ export function RestoreDialog({ savePoint, onClose, onRestored }: RestoreDialogP
 
   return (
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
-      <div className="bg-gray-900 border border-gray-700 rounded-xl p-6 w-96 shadow-2xl">
-        <h2 className="text-lg font-bold text-white mb-1">⏪ 되돌리기</h2>
-        <p className="text-sm text-gray-400 mb-4">
-          <span className="text-white font-medium">"{savePoint.memo}"</span> 시점으로 돌아갑니다.
+      <div className="bg-white border border-gray-200 rounded-xl p-6 w-96 shadow-lg">
+        <h2 className="text-lg font-bold text-gray-900 mb-1">⏪ 되돌리기</h2>
+        <p className="text-sm text-gray-500 mb-4">
+          <span className="text-gray-800 font-medium">"{savePoint.memo}"</span> 시점으로 돌아갑니다.
         </p>
 
-        <div className="bg-blue-900/20 border border-blue-700/30 rounded-lg p-3 mb-4 text-xs text-blue-300">
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4 text-xs text-blue-600">
           지금 작업 중인 내용은 자동으로 저장 지점으로 남겨둡니다. 언제든 다시 돌아올 수 있어요.
         </div>
 
@@ -50,7 +51,7 @@ export function RestoreDialog({ savePoint, onClose, onRestored }: RestoreDialogP
             <ul className="text-xs text-gray-400 space-y-0.5">
               {savePoint.changedFiles.slice(0, 8).map((f) => (
                 <li key={f} className="flex items-center gap-2">
-                  <span className="text-gray-600">📄</span>
+                  <File className="w-4 h-4 text-gray-600" />
                   <span className="font-mono truncate">{f}</span>
                 </li>
               ))}
@@ -71,14 +72,14 @@ export function RestoreDialog({ savePoint, onClose, onRestored }: RestoreDialogP
           <button
             onClick={onClose}
             disabled={isRestoring}
-            className="flex-1 px-4 py-2 rounded-lg border border-gray-600 text-gray-400 hover:bg-gray-800 transition-colors disabled:opacity-50"
+            className="flex-1 px-4 py-2 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50 transition-colors disabled:opacity-50"
           >
             취소
           </button>
           <button
             onClick={handleRestore}
             disabled={isRestoring}
-            className="flex-1 px-4 py-2 rounded-lg bg-red-600 text-white font-medium hover:bg-red-700 disabled:opacity-50 transition-colors"
+            className="flex-1 px-4 py-2 rounded-lg bg-blue-500 text-white font-medium hover:bg-blue-600 disabled:opacity-50 transition-colors"
           >
             {isRestoring ? '되돌리는 중...' : '되돌리기'}
           </button>

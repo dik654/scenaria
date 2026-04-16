@@ -9,7 +9,7 @@ import { ShortcutsTab } from './settingsPanel/ShortcutsTab';
 type SettingsTab = 'ai' | 'editor' | 'shortcuts';
 
 export function SettingsPanel() {
-  const { settings, setSettings, dirHandle } = useProjectStore();
+  const { settings, setSettings, projectRef } = useProjectStore();
   const [tab, setTab] = useState<SettingsTab>('ai');
   const [saved, setSaved] = useState(false);
 
@@ -20,11 +20,14 @@ export function SettingsPanel() {
   const storedKey = localStorage.getItem('scenaria_api_key');
   if (storedKey && !settings.ai.apiKey) setAI('apiKey', storedKey);
 
+  const { persistSettings } = useProjectStore();
+
   const handleSave = async () => {
-    if (!dirHandle) return;
+    if (!projectRef) return;
     try {
-      await fileIO.writeJSON(dirHandle, 'settings.json', settings);
+      // API key → localStorage only (not written to project file)
       if (settings.ai.apiKey) localStorage.setItem('scenaria_api_key', settings.ai.apiKey);
+      await persistSettings();
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
     } catch (err) {
@@ -34,14 +37,14 @@ export function SettingsPanel() {
 
   return (
     <div className="flex flex-col h-full">
-      <div className="flex border-b border-gray-800 flex-shrink-0">
+      <div className="flex border-b border-gray-100 flex-shrink-0">
         {([
           ['ai', 'AI 설정'],
           ['editor', '에디터'],
           ['shortcuts', '단축키'],
         ] as [SettingsTab, string][]).map(([t, label]) => (
           <button key={t} onClick={() => setTab(t)}
-            className={`px-3 py-2 text-xs transition-colors ${tab === t ? 'text-white border-b-2 border-red-500' : 'text-gray-500 hover:text-gray-300'}`}>
+            className={`px-3 py-2 text-xs transition-colors ${tab === t ? 'text-gray-800 border-b-2 border-blue-500 font-medium' : 'text-gray-400 hover:text-gray-600'}`}>
             {label}
           </button>
         ))}
@@ -53,10 +56,10 @@ export function SettingsPanel() {
         {tab === 'shortcuts' && <ShortcutsTab />}
       </div>
 
-      <div className="p-3 border-t border-gray-800">
+      <div className="p-3 border-t border-gray-100">
         <button onClick={handleSave}
           className={`w-full py-2 rounded-lg text-sm font-medium transition-colors ${
-            saved ? 'bg-green-700 text-white' : 'bg-red-600 hover:bg-red-700 text-white'
+            saved ? 'bg-green-500 text-white' : 'bg-blue-500 hover:bg-blue-600 text-white'
           }`}>
           {saved ? '✓ 저장됨' : '설정 저장'}
         </button>

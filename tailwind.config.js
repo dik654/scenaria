@@ -9,7 +9,7 @@ export default {
     extend: {
       fontFamily: {
         'mono': ['JetBrains Mono', 'Noto Sans KR', 'monospace'],
-        'sans': ['Pretendard', 'Noto Sans KR', 'sans-serif'],
+        'sans': ['Outfit', 'Pretendard Variable', 'Pretendard', 'Noto Sans KR', 'sans-serif'],
       },
       colors: {
         scenaria: {

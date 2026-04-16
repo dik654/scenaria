@@ -47,6 +47,7 @@ export interface PlotThread {
   description: string;
   characterIds: string[];
   eventIds: string[];
+  sceneIds?: string[];
 }
 
 export interface ThreadIndex {

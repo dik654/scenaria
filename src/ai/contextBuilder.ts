@@ -10,6 +10,7 @@ export interface AIContext {
   nextScene?: Partial<Scene>;
   characters: Character[];
   foreshadowing?: ForeshadowingItem[];
+  plotThreads?: { name: string; description: string }[];
   totalTokens: number;
 }
 
@@ -84,6 +85,15 @@ export function buildContextMarkdown(ctx: AIContext): string {
   if (ctx.nextScene) {
     lines.push('## 다음 씬 (요약)');
     lines.push(ctx.nextScene.meta?.summary ?? '(요약 없음)');
+    lines.push('');
+  }
+
+  // Plot threads
+  if (ctx.plotThreads && ctx.plotThreads.length > 0) {
+    lines.push('## 활성 플롯 스레드');
+    for (const t of ctx.plotThreads) {
+      lines.push(`- **${t.name}**: ${t.description}`);
+    }
     lines.push('');
   }
 

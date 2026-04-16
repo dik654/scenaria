@@ -30,23 +30,23 @@ function SceneCard({ entry, isActive, compact, onSelect }: {
     <div
       onClick={onSelect}
       className={`cursor-pointer border rounded-xl transition-all hover:shadow-lg ${
-        isActive ? 'border-red-500 shadow-red-900/30 shadow-lg' : 'border-gray-700 hover:border-gray-500'
-      } ${compact ? 'p-2' : 'p-3'} bg-gray-900`}
+        isActive ? 'border-blue-500 shadow-blue-100 shadow-lg' : 'border-gray-200 hover:border-gray-400'
+      } ${compact ? 'p-2' : 'p-3'} bg-white`}
       style={entry.cardColor ? { borderTopColor: entry.cardColor, borderTopWidth: 3 } : {}}
     >
       {/* Header row */}
       <div className="flex items-center gap-2 mb-1.5">
-        <span className="text-xs font-bold text-red-400 font-mono">S#{entry.number}</span>
+        <span className="text-xs font-bold text-blue-500 font-mono">장면 {entry.number}</span>
         <span className="text-xs text-gray-500">{entry.interior}</span>
         <span className="text-xs text-gray-400">{TIME_LABEL[entry.timeOfDay] ?? entry.timeOfDay}</span>
         <div className="flex gap-1 ml-auto">
-          {entry.hasConsistencyIssue && <span title="정합성 이슈" className="text-xs">🔴</span>}
-          {entry.hasUnresolvedForeshadowing && <span title="미회수 떡밥" className="text-xs">🟡</span>}
+          {entry.hasConsistencyIssue && <span title="정합성 이슈" className="text-xs"><span className="w-2 h-2 rounded-full bg-red-500 inline-block" /></span>}
+          {entry.hasUnresolvedForeshadowing && <span title="미회수 떡밥" className="text-xs"><span className="w-2 h-2 rounded-full bg-yellow-500 inline-block" /></span>}
         </div>
       </div>
 
       {/* Location */}
-      <p className="text-sm text-white font-medium truncate mb-1">{entry.location}</p>
+      <p className="text-sm text-gray-800 font-medium truncate mb-1">{entry.location}</p>
 
       {/* Summary */}
       {!compact && entry.summary && (
@@ -77,7 +77,7 @@ function SceneCard({ entry, isActive, compact, onSelect }: {
       {!compact && entry.tags && entry.tags.length > 0 && (
         <div className="flex gap-1 flex-wrap mt-1.5">
           {entry.tags.slice(0, 3).map(tag => (
-            <span key={tag} className="text-xs bg-gray-800 text-gray-500 px-1.5 py-0.5 rounded-full">{tag}</span>
+            <span key={tag} className="text-xs bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded-full">{tag}</span>
           ))}
         </div>
       )}
@@ -111,14 +111,14 @@ export function SceneCardBoard({ onSceneSelect }: { onSceneSelect?: (id: string)
   return (
     <div className="flex flex-col h-full">
       {/* Toolbar */}
-      <div className="flex items-center gap-2 px-3 py-2 border-b border-gray-800 flex-wrap">
+      <div className="flex items-center gap-2 px-3 py-2 border-b border-gray-200 flex-wrap">
         {/* Layout toggle */}
-        <div className="flex border border-gray-700 rounded-lg overflow-hidden">
+        <div className="flex border border-gray-200 rounded-lg overflow-hidden">
           {(['kanban', 'grid', 'list'] as BoardLayout[]).map(l => (
             <button
               key={l}
               onClick={() => setLayout(l)}
-              className={`px-2.5 py-1 text-xs transition-colors ${layout === l ? 'bg-gray-700 text-white' : 'text-gray-500 hover:text-gray-300'}`}
+              className={`px-2.5 py-1 text-xs transition-colors ${layout === l ? 'bg-gray-100 text-gray-800' : 'text-gray-500 hover:text-gray-700'}`}
             >
               {l === 'kanban' ? '칸반' : l === 'grid' ? '그리드' : '목록'}
             </button>
@@ -129,7 +129,7 @@ export function SceneCardBoard({ onSceneSelect }: { onSceneSelect?: (id: string)
         <select
           value={filterChar}
           onChange={(e) => setFilterChar(e.target.value)}
-          className="text-xs bg-gray-800 border border-gray-700 rounded-lg px-2 py-1 text-gray-300 focus:outline-none"
+          className="text-xs bg-gray-100 border border-gray-200 rounded-lg px-2 py-1 text-gray-600 focus:outline-none"
         >
           <option value="all">모든 캐릭터</option>
           {charIndex.map(c => (
@@ -186,16 +186,16 @@ export function SceneCardBoard({ onSceneSelect }: { onSceneSelect?: (id: string)
                 key={s.id}
                 onClick={() => onSceneSelect?.(s.id)}
                 className={`flex items-center gap-3 px-3 py-2 rounded-lg cursor-pointer transition-colors ${
-                  s.id === currentSceneId ? 'bg-gray-800' : 'hover:bg-gray-900'
+                  s.id === currentSceneId ? 'bg-gray-100' : 'hover:bg-gray-50'
                 }`}
               >
-                <span className="text-xs font-mono text-red-400 w-10 flex-shrink-0">S#{s.number}</span>
+                <span className="text-xs font-mono text-blue-500 w-10 flex-shrink-0">장면 {s.number}</span>
                 <span className="text-xs text-gray-500 w-8 flex-shrink-0">{s.interior}</span>
-                <span className="text-sm text-white flex-1 truncate">{s.location}</span>
+                <span className="text-sm text-gray-800 flex-1 truncate">{s.location}</span>
                 <span className="text-xs text-gray-600">{TIME_LABEL[s.timeOfDay]}</span>
                 <div className="flex gap-1">
-                  {s.hasConsistencyIssue && <span className="text-xs">🔴</span>}
-                  {s.hasUnresolvedForeshadowing && <span className="text-xs">🟡</span>}
+                  {s.hasConsistencyIssue && <span className="text-xs"><span className="w-2 h-2 rounded-full bg-red-500 inline-block" /></span>}
+                  {s.hasUnresolvedForeshadowing && <span className="text-xs"><span className="w-2 h-2 rounded-full bg-yellow-500 inline-block" /></span>}
                 </div>
               </div>
             ))}

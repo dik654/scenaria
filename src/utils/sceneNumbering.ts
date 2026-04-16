@@ -1,7 +1,7 @@
 import type { SceneIndexEntry } from '../types/scene';
 
 export function formatSceneNumber(n: number): string {
-  return `S#${n}`;
+  return `장면 ${n}`;
 }
 
 export function sceneId(number: number): string {

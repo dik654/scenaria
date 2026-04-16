@@ -1,4 +1,8 @@
-import type { FileIO, ProjectHandle } from '../types';
+import type { FileIO, ProjectHandle, ProjectRef } from '../types';
+
+function asDirHandle(ref: ProjectRef): FileSystemDirectoryHandle {
+  return ref as FileSystemDirectoryHandle;
+}
 
 async function getNestedHandle(
   dirHandle: FileSystemDirectoryHandle,
@@ -28,34 +32,37 @@ async function getFileHandle(
 export class WebFileIO implements FileIO {
   async openProject(): Promise<ProjectHandle> {
     const dirHandle = await window.showDirectoryPicker({ mode: 'readwrite' });
-    return { name: dirHandle.name, dirHandle };
+    return { name: dirHandle.name, ref: dirHandle };
   }
 
-  async createProject(name: string, parentDirHandle?: FileSystemDirectoryHandle): Promise<ProjectHandle> {
-    const parent = parentDirHandle ?? await window.showDirectoryPicker({ mode: 'readwrite' });
+  async createProject(name: string, parentRef?: ProjectRef): Promise<ProjectHandle> {
+    const parent = parentRef
+      ? asDirHandle(parentRef)
+      : await window.showDirectoryPicker({ mode: 'readwrite' });
     const projectName = name.endsWith('.scenaria') ? name : `${name}.scenaria`;
     const dirHandle = await parent.getDirectoryHandle(projectName, { create: true });
-    return { name: projectName, dirHandle };
+    return { name: projectName, ref: dirHandle };
   }
 
-  async readJSON<T>(dirHandle: FileSystemDirectoryHandle, path: string): Promise<T> {
-    const fileHandle = await getFileHandle(dirHandle, path);
+  async readJSON<T>(ref: ProjectRef, path: string): Promise<T> {
+    const fileHandle = await getFileHandle(asDirHandle(ref), path);
     const file = await fileHandle.getFile();
     const text = await file.text();
     return JSON.parse(text) as T;
   }
 
-  async writeJSON(dirHandle: FileSystemDirectoryHandle, path: string, data: unknown): Promise<void> {
-    const fileHandle = await getFileHandle(dirHandle, path, true);
+  async writeJSON(ref: ProjectRef, path: string, data: unknown): Promise<void> {
+    const fileHandle = await getFileHandle(asDirHandle(ref), path, true);
     const writable = await fileHandle.createWritable();
     await writable.write(JSON.stringify(data, null, 2));
     await writable.close();
   }
 
-  async listFiles(dirHandle: FileSystemDirectoryHandle, dirPath: string): Promise<string[]> {
+  async listFiles(ref: ProjectRef, dirPath: string): Promise<string[]> {
+    const dh = asDirHandle(ref);
     const dir = dirPath
-      ? await getNestedHandle(dirHandle, dirPath.split('/'))
-      : dirHandle;
+      ? await getNestedHandle(dh, dirPath.split('/'))
+      : dh;
     const names: string[] = [];
     for await (const entry of dir.values()) {
       names.push(entry.name);
@@ -63,37 +70,38 @@ export class WebFileIO implements FileIO {
     return names;
   }
 
-  async fileExists(dirHandle: FileSystemDirectoryHandle, path: string): Promise<boolean> {
+  async fileExists(ref: ProjectRef, path: string): Promise<boolean> {
     try {
-      await getFileHandle(dirHandle, path);
+      await getFileHandle(asDirHandle(ref), path);
       return true;
     } catch {
       return false;
     }
   }
 
-  async copyFile(dirHandle: FileSystemDirectoryHandle, from: string, to: string): Promise<void> {
-    const data = await this.readBinary(dirHandle, from);
-    await this.writeBinary(dirHandle, to, data);
+  async copyFile(ref: ProjectRef, from: string, to: string): Promise<void> {
+    const data = await this.readBinary(ref, from);
+    await this.writeBinary(ref, to, data);
   }
 
-  async deleteFile(dirHandle: FileSystemDirectoryHandle, path: string): Promise<void> {
+  async deleteFile(ref: ProjectRef, path: string): Promise<void> {
     const parts = path.split('/');
     const filename = parts.pop()!;
+    const dh = asDirHandle(ref);
     const dir = parts.length > 0
-      ? await getNestedHandle(dirHandle, parts)
-      : dirHandle;
+      ? await getNestedHandle(dh, parts)
+      : dh;
     await dir.removeEntry(filename);
   }
 
-  async readBinary(dirHandle: FileSystemDirectoryHandle, path: string): Promise<ArrayBuffer> {
-    const fileHandle = await getFileHandle(dirHandle, path);
+  async readBinary(ref: ProjectRef, path: string): Promise<ArrayBuffer> {
+    const fileHandle = await getFileHandle(asDirHandle(ref), path);
     const file = await fileHandle.getFile();
     return file.arrayBuffer();
   }
 
-  async writeBinary(dirHandle: FileSystemDirectoryHandle, path: string, data: ArrayBuffer): Promise<void> {
-    const fileHandle = await getFileHandle(dirHandle, path, true);
+  async writeBinary(ref: ProjectRef, path: string, data: ArrayBuffer): Promise<void> {
+    const fileHandle = await getFileHandle(asDirHandle(ref), path, true);
     const writable = await fileHandle.createWritable();
     await writable.write(data);
     await writable.close();

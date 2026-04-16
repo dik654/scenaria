@@ -2,23 +2,40 @@ import { useState, useEffect } from 'react';
 import { useProjectStore } from './store/projectStore';
 import { useSceneStore } from './store/sceneStore';
 import { useCharacterStore } from './store/characterStore';
+import { useStoryStore } from './store/storyStore';
 import { fileIO } from './io';
 import type { SceneIndex } from './types/scene';
 import type { CharacterIndex } from './types/character';
+import type { StoryStructure, ForeshadowingIndex } from './types/story';
 import { StartScreen } from './components/StartScreen';
 import { MenuBar } from './components/MenuBar';
 import { RightSidebar, RightToolbar, type SidePanel } from './components/RightSidebar';
 import { SceneNavigator } from './panels/SceneNavigator';
 import { ScreenplayEditor } from './editor/ScreenplayEditor';
 import { FindReplace } from './editor/widgets/FindReplace';
+import { StatusBar } from './components/StatusBar';
 import { ToastProvider } from './components/Toast';
 import { ConfirmDialogProvider } from './components/ConfirmDialog';
 import { PromptDialogProvider, usePrompt } from './components/PromptDialog';
 
 type EditorMode = 'normal' | 'focus' | 'reading' | 'typewriter';
 
+function useThemeClass() {
+  const { settings } = useProjectStore();
+  const theme = settings.theme ?? 'light';
+
+  useEffect(() => {
+    const el = document.documentElement;
+    el.classList.remove('theme-dark', 'theme-light', 'theme-sepia');
+    el.classList.add(`theme-${theme}`);
+    return () => el.classList.remove(`theme-${theme}`);
+  }, [theme]);
+
+  return theme;
+}
+
 function EditorLayout() {
-  const { dirHandle } = useProjectStore();
+  const { projectRef } = useProjectStore();
   const { setIndex, index } = useSceneStore();
   const { setIndex: setCharIndex } = useCharacterStore();
   const prompt = usePrompt();
@@ -27,17 +44,48 @@ function EditorLayout() {
   const [showFind, setShowFind] = useState(false);
   const [findReplace, setFindReplace] = useState(false);
 
-  // Load scene + character index when project opens
+  // Load scene + character + story data when project opens
   useEffect(() => {
-    if (!dirHandle) return;
+    if (!projectRef) return;
+
+    // Reset story store before loading new project data
+    const story = useStoryStore.getState();
+    story.resetStory();
+
     Promise.all([
-      fileIO.readJSON<SceneIndex>(dirHandle, 'screenplay/_index.json').catch(() => ({ scenes: [] })),
-      fileIO.readJSON<CharacterIndex>(dirHandle, 'characters/_index.json').catch(() => ({ characters: [] })),
-    ]).then(([sceneIdx, charIdx]) => {
+      fileIO.readJSON<SceneIndex>(projectRef, 'screenplay/_index.json').catch(() => ({ scenes: [] })),
+      fileIO.readJSON<CharacterIndex>(projectRef, 'characters/_index.json').catch(() => ({ characters: [] })),
+      fileIO.readJSON<StoryStructure>(projectRef, 'story/structure.json').catch(() => null),
+      fileIO.readJSON<ForeshadowingIndex>(projectRef, 'story/foreshadowing.json').catch(() => ({ items: [] })),
+      fileIO.readJSON<{ threads: { id: string; name: string; color: string; description: string; sceneIds: string[] }[] }>(
+        projectRef, 'story/plot_threads.json'
+      ).catch(() => ({ threads: [] })),
+    ]).then(([sceneIdx, charIdx, structure, foreshadowing, threadData]) => {
       setIndex(sceneIdx.scenes);
       setCharIndex(charIdx.characters);
+
+      // Load story data into storyStore
+      const { setStructure, setForeshadowing, setThreadIndex, loadThread } = useStoryStore.getState();
+      if (structure) setStructure(structure);
+      if (foreshadowing) setForeshadowing(foreshadowing);
+
+      // Load threads from legacy plot_threads.json
+      if (threadData.threads.length > 0) {
+        setThreadIndex(threadData.threads.map(t => ({ id: t.id, filename: `${t.id}.json`, name: t.name })));
+        for (const t of threadData.threads) {
+          loadThread(t.id, {
+            id: t.id,
+            name: t.name,
+            color: t.color,
+            description: t.description ?? '',
+            characterIds: [],
+            eventIds: [],
+            sceneIds: t.sceneIds ?? [],
+          });
+        }
+      }
     }).catch(console.error);
-  }, [dirHandle, setIndex, setCharIndex]);
+  }, [projectRef, setIndex, setCharIndex]);
 
   // Global keyboard shortcuts
   useEffect(() => {
@@ -106,9 +154,25 @@ function EditorLayout() {
 
   const isFocus = editorMode === 'focus';
   const isReading = editorMode === 'reading';
+  const theme = useThemeClass();
+
+  // Override theme on <html> for reading mode
+  useEffect(() => {
+    if (!isReading) return;
+    const el = document.documentElement;
+    el.classList.remove(`theme-${theme}`);
+    el.classList.add('theme-sepia');
+    return () => {
+      el.classList.remove('theme-sepia');
+      el.classList.add(`theme-${theme}`);
+    };
+  }, [isReading, theme]);
+
+  const activeTheme = isReading ? 'sepia' : theme;
+  const bgClass = activeTheme === 'dark' ? 'bg-gray-950 text-gray-100' : '';
 
   return (
-    <div className={`flex flex-col h-screen text-gray-100 overflow-hidden transition-colors ${isReading ? 'bg-amber-950' : 'bg-gray-950'}`}>
+    <div className={`flex flex-col h-screen overflow-hidden transition-colors ${bgClass}`}>
       {!isFocus && (
         <MenuBar
           mode={editorMode}
@@ -144,6 +208,8 @@ function EditorLayout() {
         />
       )}
 
+      {!isFocus && !isReading && <StatusBar />}
+
       {isReading && (
         <div className="fixed bottom-4 left-1/2 -translate-x-1/2 bg-amber-900/80 border border-amber-700 rounded-full px-4 py-1.5 text-xs text-amber-200 z-50">
           읽기 모드 · R 또는 Esc로 종료
@@ -156,6 +222,14 @@ function EditorLayout() {
 export function App() {
   const { meta } = useProjectStore();
   const [isOpen, setIsOpen] = useState(false);
+
+  // Apply default theme on <html> even before project opens
+  useEffect(() => {
+    const el = document.documentElement;
+    if (!el.classList.contains('theme-dark') && !el.classList.contains('theme-light') && !el.classList.contains('theme-sepia')) {
+      el.classList.add('theme-light');
+    }
+  }, []);
 
   if (!meta || !isOpen) return (
     <ToastProvider>

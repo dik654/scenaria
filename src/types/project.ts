@@ -36,10 +36,12 @@ export interface AppSettings {
   showLineNumbers: boolean;
   autosaveInterval: number;
   ai: {
-    provider: 'claude' | 'local-vllm' | 'openai';
+    provider: 'claude' | 'local-vllm' | 'openai' | 'claude-code';
     apiKey?: string;
     endpoint?: string;
     model?: string;
+    autoAnalysis?: boolean;
+    contextWindow?: number;
   };
   shortcuts: Record<string, string>;
   quickActions: {

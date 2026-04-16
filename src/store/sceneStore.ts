@@ -10,6 +10,7 @@ interface SceneState {
 
   setIndex: (index: SceneIndexEntry[]) => void;
   setCurrentScene: (sceneId: string, scene: Scene) => void;
+  clearCurrentScene: () => void;
   updateCurrentScene: (scene: Scene) => void;
   markDirty: () => void;
   markClean: () => void;
@@ -30,6 +31,8 @@ export const useSceneStore = create<SceneState>((set) => ({
   setIndex: (index) => set({ index }),
   setCurrentScene: (sceneId, scene) =>
     set({ currentSceneId: sceneId, currentScene: scene, isDirty: false }),
+  clearCurrentScene: () =>
+    set({ currentSceneId: null, currentScene: null, isDirty: false }),
   updateCurrentScene: (scene) => set({ currentScene: scene, isDirty: true }),
   markDirty: () => set({ isDirty: true }),
   markClean: () => set({ isDirty: false }),

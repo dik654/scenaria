@@ -37,7 +37,7 @@ export function useFindReplace(onNavigate?: (sceneId: string) => void) {
   const [statusMsg, setStatusMsg] = useState('');
 
   const { index: sceneIndex, currentScene, setCurrentScene } = useSceneStore();
-  const { dirHandle } = useProjectStore();
+  const { projectRef } = useProjectStore();
 
   const buildRegex = useCallback((q: string): RegExp | null => {
     if (!q) return null;
@@ -62,10 +62,10 @@ export function useFindReplace(onNavigate?: (sceneId: string) => void) {
   };
 
   const navigateToMatch = useCallback(async (match: Match) => {
-    if (!dirHandle) return;
+    if (!projectRef) return;
     if (match.sceneId !== currentScene?.id) {
       try {
-        const scene = await fileIO.readJSON<Scene>(dirHandle, `screenplay/${match.filename}`);
+        const scene = await fileIO.readJSON<Scene>(projectRef, `screenplay/${match.filename}`);
         setCurrentScene(match.sceneId, scene);
         onNavigate?.(match.sceneId);
       } catch { return; }
@@ -74,10 +74,10 @@ export function useFindReplace(onNavigate?: (sceneId: string) => void) {
       const el = document.querySelector(`[data-block-index="${match.blockIndex}"]`);
       el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
     }, 100);
-  }, [dirHandle, currentScene, setCurrentScene, onNavigate]);
+  }, [projectRef, currentScene, setCurrentScene, onNavigate]);
 
   const handleSearch = useCallback(async () => {
-    if (!query || !dirHandle) { setMatches([]); return; }
+    if (!query || !projectRef) { setMatches([]); return; }
     const re = buildRegex(query);
     if (!re) { setStatusMsg('잘못된 정규식입니다'); return; }
 
@@ -91,7 +91,7 @@ export function useFindReplace(onNavigate?: (sceneId: string) => void) {
           try {
             const scene = entry.id === currentScene?.id
               ? currentScene
-              : await fileIO.readJSON<Scene>(dirHandle, `screenplay/${entry.filename}`);
+              : await fileIO.readJSON<Scene>(projectRef, `screenplay/${entry.filename}`);
             return { scene, entry };
           } catch { return null; }
         })).then(r => r.filter(Boolean) as { scene: Scene; entry: typeof sceneIndex[0] }[]);
@@ -123,7 +123,7 @@ export function useFindReplace(onNavigate?: (sceneId: string) => void) {
     setIsSearching(false);
 
     if (found.length > 0) navigateToMatch(found[0]);
-  }, [query, scope, dirHandle, currentScene, sceneIndex, buildRegex, navigateToMatch]);
+  }, [query, scope, projectRef, currentScene, sceneIndex, buildRegex, navigateToMatch]);
 
   const goToMatch = useCallback((idx: number) => {
     if (matches.length === 0) return;
@@ -142,14 +142,14 @@ export function useFindReplace(onNavigate?: (sceneId: string) => void) {
   }, [currentMatch, goToMatch]);
 
   const handleReplaceOne = async () => {
-    if (!dirHandle || matches.length === 0) return;
+    if (!projectRef || matches.length === 0) return;
     const match = matches[currentMatch];
     if (!match) return;
     setStatusMsg('교체 중...');
     try {
       const scene = match.sceneId === currentScene?.id
         ? currentScene
-        : await fileIO.readJSON<Scene>(dirHandle, `screenplay/${match.filename}`);
+        : await fileIO.readJSON<Scene>(projectRef, `screenplay/${match.filename}`);
       const block = scene.blocks[match.blockIndex];
       const text = getBlockText(block);
       const re = buildRegex(query)!;
@@ -158,7 +158,7 @@ export function useFindReplace(onNavigate?: (sceneId: string) => void) {
       const newBlocks = [...scene.blocks];
       newBlocks[match.blockIndex] = setBlockText(block, newText);
       const updatedScene = { ...scene, blocks: newBlocks };
-      await fileIO.writeJSON(dirHandle, `screenplay/${match.filename}`, updatedScene);
+      await fileIO.writeJSON(projectRef, `screenplay/${match.filename}`, updatedScene);
       if (match.sceneId === currentScene?.id) setCurrentScene(match.sceneId, updatedScene);
       const newMatches = matches.filter((_, i) => i !== currentMatch);
       setMatches(newMatches);
@@ -170,7 +170,7 @@ export function useFindReplace(onNavigate?: (sceneId: string) => void) {
   };
 
   const handleReplaceAll = async () => {
-    if (!dirHandle || matches.length === 0) return;
+    if (!projectRef || matches.length === 0) return;
     setStatusMsg('전체 교체 중...');
     const byScene = new Map<string, Match[]>();
     for (const m of matches) {
@@ -185,7 +185,7 @@ export function useFindReplace(onNavigate?: (sceneId: string) => void) {
       try {
         const scene = sceneId === currentScene?.id
           ? currentScene
-          : await fileIO.readJSON<Scene>(dirHandle, `screenplay/${entry.filename}`);
+          : await fileIO.readJSON<Scene>(projectRef, `screenplay/${entry.filename}`);
         const newBlocks = scene.blocks.map(block => {
           const text = getBlockText(block);
           if (!text) return block;
@@ -195,7 +195,7 @@ export function useFindReplace(onNavigate?: (sceneId: string) => void) {
           return block;
         });
         const updatedScene = { ...scene, blocks: newBlocks };
-        await fileIO.writeJSON(dirHandle, `screenplay/${entry.filename}`, updatedScene);
+        await fileIO.writeJSON(projectRef, `screenplay/${entry.filename}`, updatedScene);
         if (sceneId === currentScene?.id) setCurrentScene(sceneId, updatedScene);
       } catch { /* skip */ }
     }

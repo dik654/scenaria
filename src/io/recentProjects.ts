@@ -1,4 +1,5 @@
 import { openDB } from 'idb';
+import type { ProjectRef } from './types';
 
 const DB_NAME = 'scenaria-recent';
 const STORE = 'projects';
@@ -7,7 +8,7 @@ const VERSION = 1;
 export interface RecentProject {
   id: string;
   name: string;
-  dirHandle: FileSystemDirectoryHandle;
+  ref: ProjectRef;
   lastOpened: string;
 }
 
@@ -36,8 +37,10 @@ export async function removeRecentProject(id: string) {
 }
 
 export async function verifyHandlePermission(
-  handle: FileSystemDirectoryHandle
+  handle: ProjectRef
 ): Promise<boolean> {
+  // Electron paths (strings) don't need browser permission checks
+  if (typeof handle === 'string') return true;
   try {
     const perm = await handle.queryPermission({ mode: 'readwrite' });
     if (perm === 'granted') return true;

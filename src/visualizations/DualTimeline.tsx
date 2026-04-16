@@ -26,28 +26,28 @@ const TIME_LABELS: Record<string, string> = {
 
 export function DualTimeline({ onSceneClick }: { onSceneClick?: (id: string) => void }) {
   const { index: scenes } = useSceneStore();
-  const { dirHandle } = useProjectStore();
+  const { projectRef } = useProjectStore();
   const [storyOrders, setStoryOrders] = useState<Record<string, number>>({});
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [dragTarget, setDragTarget] = useState<number | null>(null);
 
   const load = useCallback(async () => {
-    if (!dirHandle) return;
+    if (!projectRef) return;
     try {
-      const data = await fileIO.readJSON<StoryTimeStore>(dirHandle, 'story/timeline_order.json');
+      const data = await fileIO.readJSON<StoryTimeStore>(projectRef, 'story/timeline_order.json');
       const map: Record<string, number> = {};
       for (const e of data?.entries ?? []) map[e.sceneId] = e.storyOrder;
       setStoryOrders(map);
     } catch {
       setStoryOrders({});
     }
-  }, [dirHandle]);
+  }, [projectRef]);
 
   const saveOrders = useCallback(async (orders: Record<string, number>) => {
-    if (!dirHandle) return;
+    if (!projectRef) return;
     const entries: StoryTimeEntry[] = Object.entries(orders).map(([sceneId, storyOrder]) => ({ sceneId, storyOrder }));
-    try { await fileIO.writeJSON(dirHandle, 'story/timeline_order.json', { entries }); } catch { /* ignore */ }
-  }, [dirHandle]);
+    try { await fileIO.writeJSON(projectRef, 'story/timeline_order.json', { entries }); } catch { /* ignore */ }
+  }, [projectRef]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -98,14 +98,14 @@ export function DualTimeline({ onSceneClick }: { onSceneClick?: (id: string) => 
     <div className="flex flex-col h-full p-4 overflow-auto">
       <div className="flex items-center justify-between mb-4 flex-shrink-0">
         <div>
-          <h3 className="text-sm font-medium text-gray-300">이중 타임라인</h3>
+          <h3 className="text-sm font-medium text-gray-700">이중 타임라인</h3>
           <p className="text-xs text-gray-600 mt-0.5">
             위: 서사 순서 (화면에 보이는 순서) · 아래: 이야기 내 실제 시간 순서
           </p>
         </div>
         <div className="flex items-center gap-2">
           {hasCustomOrder && (
-            <button onClick={resetOrder} className="px-2 py-1 text-xs bg-gray-800 hover:bg-gray-700 text-gray-400 rounded">
+            <button onClick={resetOrder} className="px-2 py-1 text-xs bg-gray-100 hover:bg-gray-100 text-gray-600 rounded">
               순서 초기화
             </button>
           )}
@@ -129,7 +129,7 @@ export function DualTimeline({ onSceneClick }: { onSceneClick?: (id: string) => 
           {narrativeScenes.map(s => (
             <div
               key={s.id}
-              title={`S#${s.number}. ${s.location} (${TIME_LABELS[s.timeOfDay] ?? s.timeOfDay})`}
+              title={`장면 ${s.number}. ${s.location} (${TIME_LABELS[s.timeOfDay] ?? s.timeOfDay})`}
               className="flex-shrink-0 rounded-sm cursor-pointer hover:opacity-80 transition-opacity relative group"
               style={{
                 width: CELL_W - 2,
@@ -186,7 +186,7 @@ export function DualTimeline({ onSceneClick }: { onSceneClick?: (id: string) => 
               onDragOver={e => { e.preventDefault(); setDragTarget(storyIdx); }}
               onDrop={handleDragEnd}
               onDragEnd={handleDragEnd}
-              title={`S#${s.number}. ${s.location} — 드래그로 순서 변경`}
+              title={`장면 ${s.number}. ${s.location} — 드래그로 순서 변경`}
               className="flex-shrink-0 rounded-sm cursor-grab hover:opacity-80 transition-opacity relative"
               style={{
                 width: CELL_W - 2,

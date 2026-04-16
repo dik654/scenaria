@@ -33,7 +33,7 @@ export function CharacterPresence({ mode = 'heatmap' }: { mode?: PresenceMode })
         <div className="flex gap-3 text-xs text-gray-600">
           <span><span className="inline-block w-3 h-3 rounded-sm bg-red-600 mr-1 align-middle" />등장+대사</span>
           <span><span className="inline-block w-3 h-3 rounded-sm bg-blue-800 mr-1 align-middle" />등장만</span>
-          <span><span className="inline-block w-3 h-3 rounded-sm bg-gray-800 mr-1 align-middle" />미등장</span>
+          <span><span className="inline-block w-3 h-3 rounded-sm bg-gray-200 mr-1 align-middle" />미등장</span>
         </div>
       </div>
 
@@ -76,7 +76,7 @@ export function CharacterPresence({ mode = 'heatmap' }: { mode?: PresenceMode })
             <div key={char.id} className="flex items-center mb-0.5">
               {/* Name label */}
               <div
-                className="text-xs text-gray-300 truncate flex-shrink-0 pr-2 text-right"
+                className="text-xs text-gray-600 truncate flex-shrink-0 pr-2 text-right"
                 style={{ width: LABEL_W }}
                 title={char.name}
               >
@@ -88,7 +88,7 @@ export function CharacterPresence({ mode = 'heatmap' }: { mode?: PresenceMode })
               {appearances.map((status, i) => (
                 <div
                   key={i}
-                  title={`S#${scenes[i].number}: ${scenes[i].location} — ${status === 'appears' ? '등장' : '미등장'}`}
+                  title={`장면 ${scenes[i].number}: ${scenes[i].location} — ${status === 'appears' ? '등장' : '미등장'}`}
                   className="rounded-sm mx-px cursor-pointer hover:opacity-80 transition-opacity"
                   style={{
                     width: CELL_W - 2,
